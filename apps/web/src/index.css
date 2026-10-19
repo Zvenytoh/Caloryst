@@ -311,6 +311,13 @@ abbr[title] {
   font-size: 1.0625rem;
 }
 
+.welcome__demo {
+  max-inline-size: 26rem;
+  margin-block-start: calc(var(--space-3) * -1);
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
 /* Shell */
 .shell {
   max-inline-size: 72rem;

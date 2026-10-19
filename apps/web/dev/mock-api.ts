@@ -27,6 +27,8 @@ type Account = {
 
 const COOKIE = 'kalo_dev_session'
 const accounts = new Map<string, Account>()
+// Public demo deployments create an account per visitor; keep memory bounded by dropping the oldest.
+const MAX_ACCOUNTS = 500
 
 const DECIMAL = /^\d{1,7}(\.\d{1,3})?$/
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -165,6 +167,7 @@ async function route(req: IncomingMessage, res: ServerResponse, url: URL) {
   if (method === 'GET' && path === '/api/v1/auth/login') {
     // Stands in for the OIDC redirect flow.
     const id = randomUUID()
+    if (accounts.size >= MAX_ACCOUNTS) accounts.delete(accounts.keys().next().value ?? '')
     accounts.set(id, {
       displayName: 'Dan',
       foods: seedFoods(),

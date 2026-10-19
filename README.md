@@ -127,6 +127,15 @@ development and preview only; data is lost on restart and "Se connecter" signs i
 a demo account without a password. The service worker is registered only in
 production builds. No Rust checks or CI workflows exist yet.
 
+### Demo deployment (Dokploy or any Docker host)
+
+`apps/web/Dockerfile` serves the production build and the in-memory development
+API on port 4173. In Dokploy: create an application from this repository and
+branch, choose the Dockerfile build type with Dockerfile path `apps/web/Dockerfile`
+and build context `apps/web`, expose port 4173, and attach a domain with HTTPS.
+This is a demo only: anyone can open a demo account, data lives in server memory
+and disappears on redeploy. Do not use it for real user data.
+
 The web app uses the working name **Kalo** (logo masters and icons in
 `branding/kalo/`). Beyond the first milestone, the development API also covers
 macronutrients per food, meals, daily goals, water, and manual activities; the
