@@ -12,7 +12,7 @@ export async function signOut(): Promise<void> {
   await api('/auth/logout', { method: 'POST' })
 }
 
-/** Starts the identity-provider sign-in flow (full-page redirect). */
+/** Opens the sign-in page: VITE_SIGN_IN_URL (e.g. the Better Auth login page), or the dev login. */
 export function signIn(): void {
-  window.location.assign('/api/v1/auth/login')
+  window.location.assign(import.meta.env.VITE_SIGN_IN_URL || '/api/v1/auth/login')
 }

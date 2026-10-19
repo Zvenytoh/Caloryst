@@ -35,8 +35,9 @@ stores account mappings, food records, and private diary entries.
 
 ### Project status
 
-**Early development.** The React PWA in `apps/web` runs against an in-memory
-development API. There is no Rust API, database schema, or release yet.
+**Early development.** The React PWA (`apps/web`) and the Rust API with its
+PostgreSQL schema (`apps/api`, `crates/`) run end to end. Sign-in is delegated to
+Better Auth, which is not set up yet. No release exists.
 
 ## Planned first release
 
@@ -98,8 +99,9 @@ provider will be selected before scaffolding. The
 - [ ] Confirm identity provider, hosting constraints, and retention policy.
 - [x] Scaffold the React + TypeScript application.
 - [x] Add the PWA manifest, install icons, public-shell caching, and update flow.
-- [x] Build the food-to-diary interface, daily summary, and entry editing/deletion (against the development API).
-- [ ] Scaffold the Rust workspace and deliver the real API and PostgreSQL schema.
+- [x] Build the food-to-diary interface, daily summary, and entry editing/deletion.
+- [x] Scaffold the Rust workspace and deliver the API and PostgreSQL schema.
+- [ ] Set up Better Auth sign-in on the same domain.
 - [ ] Import the CIQUAL and Open Food Facts catalogs with source attribution.
 - [ ] Complete release checks, deployment instructions, and data lifecycle controls.
 
@@ -122,28 +124,37 @@ npm run build      # production bundle and service worker in dist/
 npm run preview    # serve the production build with the development API
 ```
 
-`apps/web/dev/mock-api.ts` implements the planned `/api/v1` contract in memory for
-development and preview only; data is lost on restart and "Se connecter" signs in
-a demo account without a password. The service worker is registered only in
-production builds. No Rust checks or CI workflows exist yet.
+Without `KALO_API_URL`, `apps/web/dev/mock-api.ts` answers `/api/v1` in memory
+(data lost on restart). The service worker is registered only in production builds.
 
-### Demo deployment (Dokploy or any Docker host)
+The API needs Rust 1.99.1 (pinned in `rust-toolchain.toml`) and PostgreSQL 17:
 
-`apps/web/Dockerfile` serves the production build and the in-memory development
-API on port 4173. In Dokploy: create an application from this repository and
-branch, choose the Dockerfile build type with Dockerfile path `apps/web/Dockerfile`
-and build context `apps/web`, expose port 4173, and attach a domain with HTTPS.
-This is a demo only: anyone can open a demo account, data lives in server memory
-and disappears on redeploy. Do not use it for real user data.
+```sh
+cp apps/api/.env.example apps/api/.env   # then set DATABASE_URL
+cargo run -p caloryst-api                # http://localhost:8080, applies migrations
+KALO_API_URL=http://localhost:8080 npm --prefix apps/web run dev
+cargo fmt --all --check
+cargo clippy --all-targets --locked -- -D warnings
+```
+
+The API reads environment variables only: load `apps/api/.env` into your shell
+before `cargo run`. With `KALO_AUTH=dev`, "Se connecter" signs in a shared local user.
+No CI workflow exists yet.
+
+### Deployment
+
+The root `Dockerfile` builds one image serving the PWA and the API on port 8080.
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) lists the environment variables and the
+Dokploy, PostgreSQL, domain and Better Auth setup.
 
 The web app uses the working name **Kalo** (logo masters and icons in
-`branding/kalo/`). Beyond the first milestone, the development API also covers
-macronutrients per food, meals, daily goals, water, and manual activities; the
-Rust API must implement the same contract before it replaces the mock.
+`branding/kalo/`). Beyond the first milestone, the API also covers macronutrients
+per food, meals, daily goals, water, and manual activities.
 
 | Document | Read it for |
 | :--- | :--- |
 | [Architecture](docs/ARCHITECTURE.md) | Layers, dependencies, data boundaries, deployment direction |
+| [Deployment](docs/DEPLOYMENT.md) | Docker image, environment variables, Dokploy and Better Auth |
 | [Engineering standards](docs/ENGINEERING.md) | Rust, Axum, React, TypeScript, persistence conventions |
 | [Contributing](CONTRIBUTING.md) | Contribution scope and validation expectations |
 | [Tooling](docs/TOOLING.md) | RTK, skills, Context7, Graphify, and analysis tools |

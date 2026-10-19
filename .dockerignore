@@ -1,0 +1,9 @@
+.git
+target
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+**/*.local
+graphify-out
+branding/concepts

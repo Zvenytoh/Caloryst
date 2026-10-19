@@ -74,7 +74,6 @@ export function App() {
           {state.kind === 'signedOut' && (
             <>
               <p className="welcome__lead">Calories, macros, eau et activités : votre journée, claire et précise, en un coup d’œil.</p>
-              <p className="welcome__demo">Version de démonstration : vos données sont temporaires et effacées au redémarrage du serveur.</p>
               <button type="button" className="button button--large" onClick={signIn}>
                 Se connecter
               </button>

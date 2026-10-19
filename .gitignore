@@ -21,3 +21,6 @@ graphify-out/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local machine secrets
+*.local

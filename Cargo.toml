@@ -1,0 +1,9 @@
+[workspace]
+resolver = "3"
+members = ["crates/caloryst-domain", "crates/caloryst-application", "apps/api"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+publish = false

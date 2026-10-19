@@ -1,0 +1,13 @@
+[package]
+name = "caloryst-application"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+caloryst-domain = { version = "0.1.0", path = "../caloryst-domain" }
+rust_decimal = "1.43.0"
+time = "0.3.55"
+uuid = "1.28.0"
