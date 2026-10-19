@@ -2,10 +2,11 @@
   <img src="assets/logo.png" width="128" height="128" alt="Caloryst logo">
   <h1>Caloryst</h1>
   <p><strong>Understand your intake. Own your daily habits.</strong></p>
-  <p>An open-source calorie tracker built around a clear, practical food diary.</p>
+  <p>An open-source calorie-tracking PWA built around a clear, practical food diary.</p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-006B50" alt="MIT license"></a>
     <img src="https://img.shields.io/badge/Stage-Architecture_design-E76F51" alt="Architecture design stage">
+    <img src="https://img.shields.io/badge/Platform-PWA-006B50" alt="Target platform: progressive web app">
     <img src="https://img.shields.io/badge/Planned-React_%2B_TypeScript-3178C6" alt="Planned frontend: React and TypeScript">
     <img src="https://img.shields.io/badge/Planned-Rust_%2B_Axum-DEA584" alt="Planned backend: Rust and Axum">
     <img src="https://img.shields.io/badge/Planned-PostgreSQL-4169E1" alt="Planned database: PostgreSQL">
@@ -24,8 +25,8 @@
 
 ## Overview
 
-Caloryst is an open-source calorie counter designed for a web service with
-individual user accounts. Its first goal is a straightforward daily workflow:
+Caloryst is an open-source calorie counter designed as a progressive web app
+(PWA) with individual user accounts. Its first goal is a straightforward daily workflow:
 choose a food, enter a portion, and understand the day's calorie intake.
 
 The architecture keeps nutrition rules independent of the web framework and
@@ -40,6 +41,7 @@ All capabilities and source directories described below are planned.
 
 ## Planned first release
 
+- **Installable PWA** — a responsive app for mobile and desktop, with standalone launch on supported browsers.
 - **Individual accounts** — sign in and access your own food records and diary.
 - **Food records** — create foods with an explicit energy value per 100 g.
 - **Daily diary** — record gram-based portions against an intended calendar date.
@@ -50,6 +52,10 @@ All capabilities and source directories described below are planned.
 External food catalogs, barcode scanning, recipes, macro tracking, native mobile
 apps, and offline synchronization are outside the proposed first milestone.
 
+The proposed initial offline experience covers the public app shell and a clear
+connection-required screen. Private diary access and saving entries require a
+connection; offline logging and synchronization remain separate scope decisions.
+
 ## Architecture
 
 **Clean Architecture, delivered as a modular monolith.** One API and one database
@@ -57,7 +63,7 @@ keep deployment straightforward. Business rules live behind explicit boundaries.
 
 ```mermaid
 flowchart LR
-    Web[React + TypeScript] -->|JSON / HTTPS| HTTP[Axum HTTP adapter]
+    Web[React + TypeScript PWA] -->|JSON / HTTPS| HTTP[Axum HTTP adapter]
     HTTP --> App[Application use cases]
     App --> Domain[Domain rules]
     App --> Ports[Application ports]
@@ -77,7 +83,7 @@ the proposed source layout, account isolation, and a complete request flow.
 
 | Layer | Proposed technology | Responsibility |
 | :--- | :--- | :--- |
-| Web interface | React + TypeScript + Vite | Forms, navigation, presentation, API integration |
+| Web interface | React + TypeScript + Vite, delivered as a PWA | Installable interface, forms, navigation, API integration |
 | HTTP API | Rust + Axum + Tokio | Transport, verified identity, request lifecycle |
 | Business logic | Rust domain and application crates | Nutrition rules, use cases, ownership policy |
 | Persistence | PostgreSQL + SQLx | Parameterized queries, transactions, migrations |
@@ -92,6 +98,7 @@ provider will be selected before scaffolding. The
 - [x] Initial Clean Architecture specification and engineering standards.
 - [ ] Confirm identity provider, hosting constraints, and retention policy.
 - [ ] Scaffold the Rust workspace and React + TypeScript application.
+- [ ] Add the PWA manifest, install icons, public-shell caching, and update flow.
 - [ ] Deliver an authenticated food-to-diary vertical slice.
 - [ ] Add daily summaries and entry editing/deletion.
 - [ ] Complete release checks, deployment instructions, and data lifecycle controls.

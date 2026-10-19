@@ -6,7 +6,7 @@ Design a Clean Architecture for an open-source calorie tracker using React,
 TypeScript, Rust, Axum, and PostgreSQL. Bring the English README to the presentation
 standard of the owner's UltraMusic and Discard repositories.
 
-The owner explicitly selected a service with individual user accounts.
+The owner explicitly selected a progressive web app (PWA) with individual user accounts.
 
 ## Deliverables and source of truth
 
@@ -21,6 +21,10 @@ A modular monolith, three backend packages, feature-based frontend organization,
 manual food entry, decimal quantities, historical diary snapshots, provider-backed
 authentication, and server-side sessions. These are recommendations rather than
 additional product requirements approved by the owner.
+
+PWA delivery includes manifest/icons and a service worker lifecycle. The initial
+offline recommendation covers the public shell only; private data access requires
+a connection. Offline logging/synchronization remains a separate product decision.
 
 ## Scope and unresolved decisions
 

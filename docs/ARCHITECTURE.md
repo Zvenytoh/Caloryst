@@ -2,11 +2,11 @@
 
 **Status:** proposed design, not an implemented system.
 
-**Product constraint:** a web service with individual user accounts.
+**Product constraint:** a progressive web app (PWA) with individual user accounts.
 
 **Technical recommendation:** React + TypeScript, Rust + Axum, PostgreSQL + SQLx.
 
-The account model and Clean Architecture direction come from the project owner.
+The PWA target, account model, and Clean Architecture direction come from the project owner.
 The layout, authentication integration, and data representation below are engineering
 recommendations for review before implementation.
 
@@ -68,13 +68,16 @@ Caloryst/
 │   │   │   ├── identity/            OIDC integration and identity mapping
 │   │   │   └── postgres/            SQLx adapters and row mapping
 │   │   └── migrations/              versioned SQL migrations
-│   └── web/src/
-│       ├── app/                     bootstrap, routing, providers
-│       ├── features/
-│       │   ├── auth/                session UI and sign-in flow
-│       │   ├── foods/               components, model, hooks, API access
-│       │   └── diary/               components, model, hooks, API access
-│       └── shared/                  reused UI, transport, generated contracts
+│   └── web/
+│       ├── public/                  manifest and install icons
+│       └── src/
+│           ├── app/                 bootstrap, routing, providers
+│           │   └── pwa/             worker registration and update UI
+│           ├── features/
+│           │   ├── auth/            session UI and sign-in flow
+│           │   ├── foods/           components, model, hooks, API access
+│           │   └── diary/           components, model, hooks, API access
+│           └── shared/              reused UI, transport, generated contracts
 ├── assets/
 └── docs/
 ```
@@ -216,7 +219,48 @@ loading, empty, unauthenticated, error, and success states. Cancel obsolete requ
 and prevent stale responses replacing the selected day's data. Begin with pessimistic
 mutations; introduce caching or optimistic updates for a demonstrated need.
 
-## 10. Deployment
+## 10. PWA delivery and lifecycle
+
+The PWA belongs to the outer web delivery layer; installation, caching, and worker
+lifecycle do not change domain or application dependencies. Exact build tooling
+will be chosen during scaffolding.
+
+Provide a web app manifest with stable identity, name, start URL, scope, standalone
+display, theme colors, and suitable install icons, including 192/512 px and a
+dedicated maskable variant. The current README logo is not yet an install-icon set.
+Serve production over HTTPS and retain normal website behavior when installation
+is unsupported. Install UI and instructions must reflect actual browser capabilities.
+
+Recommended first milestone: cache only the public, non-personalized app shell
+and build-versioned static assets. After an initial online load, offline launch
+shows an explicit connection-required state. Private diary reads and writes
+remain online; do not add IndexedDB diary storage, queued mutations, or background
+sync without a separate conflict-resolution and privacy design.
+
+| Resource | Initial policy |
+| :--- | :--- |
+| Public shell and hashed assets | Explicit precache allowlist, scoped to the build |
+| API, session, authentication/callback routes | Network only; never store in Cache Storage |
+| Private HTTP responses | `Cache-Control: no-store` at API/proxy; no persistent client cache |
+| Navigation on network failure | Public shell fallback only for known frontend routes |
+
+Never turn API errors or authentication redirects into cached HTML. The service
+worker must explicitly exclude private routes; HTTP cache headers alone do not
+define its Cache Storage policy. Clear private in-memory views on logout/account
+switch, notify other tabs, and revalidate sessions on resume before showing data.
+Logging out on the server requires a connection; do not claim revocation when offline.
+
+Use versioned Caloryst-owned caches. Offer a visible update action when a worker
+is waiting; do not force activation or reload while an entry form is unsaved.
+Preserve old assets for active clients and delete only obsolete caches owned by
+Caloryst once safe. Keep the worker URL stable and revalidatable. Deployment must
+retain compatible API behavior and asset availability during client version overlap.
+
+Offline logging, notifications, and a browser/device support matrix remain decisions
+for later scope review. Installability and lifecycle guidance: [PWA installation][pwa]
+and [service workers][workers].
+
+## 11. Deployment
 
 Serve frontend assets and `/api` behind one TLS origin; keep PostgreSQL private.
 Validate configuration at startup. Secrets never enter source control or the
@@ -231,19 +275,25 @@ the runtime database role must not have schema-change privileges.
 Document backups, restore verification, retention, and safe migration rollout
 before launch. Public readiness must not expose internal configuration.
 
-## 11. Verification and open decisions
+## 12. Verification and open decisions
 
 Plan verification at each boundary: arithmetic/rounding, fake-port use cases,
 actual PostgreSQL constraints/transactions, HTTP validation and cross-user access,
 and frontend interactions. Include fractional portions, history snapshots, date
 boundaries, and one account attempting to modify another account's data.
 
+PWA release verification must cover install/standalone launch, deep links, offline
+shell fallback, private-route cache exclusion, logout/account switching across tabs,
+and updates with an unsaved form. Check agreed mobile and desktop browsers on
+real target environments; no such behavior has been implemented or validated yet.
+
 No application checks are implemented here. Unit/functional tests run only on
 explicit request. See [engineering standards](ENGINEERING.md) for intended checks.
 
 Before implementation, confirm the proposed layout/manual-entry scope, choose
 the identity provider and hosting, set operational/input bounds and retention,
-and pin toolchains plus contract-generation tooling.
+and pin toolchains plus contract-generation tooling. Agree on the PWA browser/device
+support matrix and initial offline scope before implementing the worker.
 
 ## References
 
@@ -257,6 +307,7 @@ These sources inform Caloryst's recommendations; they do not prescribe this layo
 - [React state and effects][react]
 - [TypeScript strict checking][typescript]
 - [OpenID Connect][oidc], [OWASP sessions][sessions], [OWASP CSRF][csrf]
+- [PWA installation][pwa] and [service worker lifecycle][workers]
 
 [clean]: https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html
 [rust]: https://doc.rust-lang.org/book/ch09-03-to-panic-or-not-to-panic.html
@@ -270,3 +321,5 @@ These sources inform Caloryst's recommendations; they do not prescribe this layo
 [oidc]: https://openid.net/specs/openid-connect-core-1_0.html
 [sessions]: https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
 [csrf]: https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+[pwa]: https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable
+[workers]: https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers

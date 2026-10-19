@@ -76,6 +76,23 @@ configuration, or CI. Follow the [architecture](ARCHITECTURE.md) for boundaries.
 - Choose one package manager and commit its lockfile. Select lint/format settings
   when scaffolding rather than inventing scripts in documentation.
 
+## PWA
+
+- Treat PWA code as delivery infrastructure; keep it out of nutrition/business rules.
+- Provide manifest/install icons, HTTPS delivery, standalone layouts, and a useful
+  website fallback. Feature-detect installation APIs instead of assuming support.
+- Precache only allowlisted public shell assets. Explicitly bypass API, session,
+  and auth routes; private responses must not enter Cache Storage or IndexedDB.
+- Begin with an offline connection-required screen. Do not queue writes or claim
+  entries were saved when the server has not confirmed them.
+- Keep worker/cache versions consistent with the frontend build. Prompt for an
+  update without discarding unsaved forms or breaking other open tabs.
+- Revalidate on resume and clear private UI state across tabs after logout or
+  account switching. Never clear unrelated origin caches during cleanup.
+- Verify installation, offline boundaries, and update behavior on the agreed
+  browser/device matrix before claiming PWA support. See the
+  [PWA design](ARCHITECTURE.md#10-pwa-delivery-and-lifecycle).
+
 ## Contracts and privacy
 
 - Align OpenAPI and generated wire types. TypeScript alone cannot validate JSON.
@@ -95,6 +112,7 @@ These are validation targets, not available repository commands.
 | Rust static analysis | Clippy, warnings denied on supported targets |
 | Rust compilation | Locked workspace build |
 | Frontend | Strict type check, React Hooks lint, formatting, production build |
+| PWA, when requested | Installability, offline shell, private-cache exclusion, updates, cross-tab sessions |
 | Contracts | OpenAPI and generated-type drift |
 | Persistence | Migrations and checked-query metadata against PostgreSQL |
 | Tests, when requested | Domain edge cases, use-case policy, transactions, cross-user access, UI interactions |
