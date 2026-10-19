@@ -1,62 +1,272 @@
-# Architecture discussion
+# Caloryst architecture
 
-## Status
+**Status:** proposed design, not an implemented system.
 
-Documentation only. React is the requested frontend direction, PostgreSQL is the
-requested database direction, and Rust is under consideration for the backend.
-TypeScript, Vite, Axum, and SQLx are recommendations, not finalized decisions.
+**Product constraint:** a web service with individual user accounts.
 
-## Recommended starting point
+**Technical recommendation:** React + TypeScript, Rust + Axum, PostgreSQL + SQLx.
 
-```text
-React + TypeScript web interface
-              |
-          JSON / HTTP
-              |
-        Rust + Axum API
-              |
-         SQLx queries
-              |
-          PostgreSQL
+The account model and Clean Architecture direction come from the project owner.
+The layout, authentication integration, and data representation below are engineering
+recommendations for review before implementation.
+
+## 1. Scope
+
+Build one complete workflow first: a signed-in user creates a food, records a
+gram-based portion in their diary, and reads the day's entries and total.
+Manual food entry avoids choosing an external catalog before reviewing its
+license, quality, and availability.
+
+Start with one backend process and one PostgreSQL database. Use compile-time
+boundaries rather than distributed services. An event bus, generic CRUD framework,
+and repository for every table are unnecessary at this stage.
+
+## 2. Dependency rule
+
+Business policy must not depend on delivery or storage details, following the
+[Clean Architecture dependency rule][clean].
+
+```mermaid
+flowchart TD
+    Server[API package: HTTP, PostgreSQL, startup] --> Application[Application crate: use cases and ports]
+    Application --> Domain[Domain crate: entities and value types]
+    Server --> Domain
 ```
 
-Use a single backend deployment and a single database initially. No microservices,
-message broker, or cache is justified by the current requirements.
+These arrows represent **source dependencies**, not database call direction.
+At runtime a use case calls an application-owned trait implemented by a PostgreSQL
+adapter. Startup constructs and injects the concrete adapters.
 
-React fits the interactive diary and food-entry forms. TypeScript makes component
-and API data contracts more explicit. Vite is a suitable build tool for a client
-application backed by a separate API.
+| Boundary | Owns | Dependencies | Must not leak inward |
+| :--- | :--- | :--- | :--- |
+| Domain | Foods, diary snapshots, quantities, energy, invariants | Standard library and justified value libraries | HTTP, SQL rows, framework state |
+| Application | Commands, use cases, ports, ownership policy, errors | Domain | Axum, SQLx, transactions, HTTP status codes |
+| HTTP adapter | Routes, DTOs, session extraction, response mapping | Application and domain | Wire formats and extractor types |
+| PostgreSQL adapter | Queries, row mapping, transactions, storage errors | Application, domain, SQLx | Driver types and errors |
+| Composition root | Config, pool, services, router, shutdown | All backend layers | Service locator or global mutable configuration |
 
-Rust is a reasonable choice if learning or maintaining Rust is part of the goal.
-It offers strong compile-time guarantees but adds initial development work around
-async code, error handling, and integration. A TypeScript backend is an alternative
-if shipping quickly with one language matters more. Calorie counting alone does
-not require Rust's performance characteristics.
+Use distinct DTOs, entities, and row types where their semantics differ. Keep
+transport serialization out of core entities; avoid mechanical mapping layers
+that do not protect a real boundary.
 
-PostgreSQL suits related foods, portions, and diary entries. SQLx would keep SQL
-and migrations explicit without adding a separate ORM model layer.
+## 3. Proposed source layout
 
-## Nutrition data principles for implementation
+Target layout only: these source directories do not exist yet.
 
-- Distinguish kcal from kJ and grams from serving counts.
-- Define decimal precision and rounding once; round for display deliberately.
-- Consider fixed-scale decimal columns for stored quantities and energy values.
-- Keep the nutrition values used by a diary entry as a historical snapshot.
-- Associate daily entries with the user's intended date and time zone.
-- Validate portions and nutrition values before calculating totals.
+```text
+Caloryst/
+├── Cargo.toml                       workspace manifest
+├── crates/
+│   ├── caloryst-domain/src/          food, diary, nutrition, errors
+│   └── caloryst-application/src/     use cases, commands, ports, errors
+├── apps/
+│   ├── api/
+│   │   ├── src/
+│   │   │   ├── main.rs              entry point and dependency wiring
+│   │   │   ├── config.rs            validated startup configuration
+│   │   │   ├── http/                routes, DTOs, sessions, response errors
+│   │   │   ├── identity/            OIDC integration and identity mapping
+│   │   │   └── postgres/            SQLx adapters and row mapping
+│   │   └── migrations/              versioned SQL migrations
+│   └── web/src/
+│       ├── app/                     bootstrap, routing, providers
+│       ├── features/
+│       │   ├── auth/                session UI and sign-in flow
+│       │   ├── foods/               components, model, hooks, API access
+│       │   └── diary/               components, model, hooks, API access
+│       └── shared/                  reused UI, transport, generated contracts
+├── assets/
+└── docs/
+```
 
-These are design recommendations; no schema or calculation engine exists yet.
+Use three backend packages: domain, application, API. The outer API package owns
+HTTP, identity, and PostgreSQL modules. Separate adapter crates can wait until a
+real reuse need arises. Domain/application exclude Axum, SQLx, Tokio, and wire
+serialization dependencies. Limit visibility rather than exporting every module.
 
-## Open decisions
+## 4. Domain and nutrition
 
-- Web-only first release, mobile-friendly web, or a later native client?
-- Manual food entry, an external food database, or both? Review data licensing before importing a catalog.
-- Personal use, self-hosted multi-user use, or a hosted service?
-- Accounts, data export/deletion, and the precise first-release scope.
+Domain logic is synchronous and deterministic: no storage, request context, clock
+access, or background tasks.
 
-## Documentation references
+| Concept | Proposed invariant |
+| :--- | :--- |
+| Food | Private to its owner initially; name and kcal per 100 g required |
+| Portion | Positive grams, up to three fractional digits |
+| Energy density | Nonnegative kcal per 100 g, up to three fractional digits |
+| Diary entry | Owner, diary date, grams, food name and density snapshot |
+| Daily summary | One owner's entries for one date; server-derived total |
 
-- [React: building an app from scratch](https://react.dev/learn/build-a-react-app-from-scratch)
-- [Axum](https://github.com/tokio-rs/axum)
-- [SQLx](https://github.com/launchbadge/sqlx)
-- [PostgreSQL numeric types](https://www.postgresql.org/docs/18/datatype-numeric.html)
+Use private fields and fallible constructors for validated value types. Choose
+explicit product upper bounds with the first schema; validate before arithmetic.
+
+Recommended representation: decimal arithmetic in Rust, `NUMERIC(12,3)` for
+stored grams and density, decimal strings in JSON. Reject excess input precision
+rather than silently rounding. Database checks also reject NaN and out-of-range
+values; use `NOT NULL` alongside range checks. Validate rows on entry to the domain.
+
+At 80 kcal/100 g, a 150 g portion yields 120 kcal. Keep a name/density snapshot
+on the entry, so changing a food does not rewrite history. Calculate totals from
+unrounded values, then round for display to one decimal place using a documented
+midpoint-away-from-zero policy. Do not store a second independently editable total.
+
+A diary date is an explicit `YYYY-MM-DD` calendar date selected by the user, not
+a UTC timestamp truncated to midnight. Store audit instants as `timestamptz`.
+The browser may suggest today's local date; it sends the intended date explicitly.
+
+## 5. Use cases, ports, and transactions
+
+Examples: `CreateFood`, `RecordFood`, `GetDailyDiary`. Use ordinary functions or
+small structs with explicit dependencies; commands/results use core types.
+
+Define narrow ports such as `FoodRepository` and `DiaryRepository` in the application
+crate. Use domain-specific operations, not a generic CRUD base trait. Port errors
+distinguish missing records, conflicts, and unavailable dependencies without SQLx.
+
+Prefer generics and static dispatch initially. Async ports must express the `Send`
+future guarantees required by Axum; native async trait methods are not automatically
+usable through `dyn Trait`. Add boxing or async-trait only if dynamic dispatch is needed.
+
+One atomic write is one port operation. Its adapter owns the transaction and
+rolls back on failure; no `sqlx::Transaction` crosses into the application. When a
+workflow needs multiple writes, define a suitably atomic operation before adding
+a general unit-of-work framework.
+
+## 6. Example: record a food
+
+1. The browser sends food ID, grams as a decimal string, and diary date.
+2. Axum validates the request shape and obtains an actor from a verified session.
+3. `RecordFood` receives actor and command, validating quantity and date.
+4. The food port loads a name/density snapshot **scoped to the actor**. Missing
+   and inaccessible food IDs produce the same not-found result.
+5. Domain logic validates the snapshot and calculates energy. The application
+   passes owner, date, grams, and snapshot to the diary write port.
+6. PostgreSQL inserts the entry atomically. A concurrent catalog edit cannot alter
+   the snapshot already read. Catalog deletion must not remove diary history.
+7. The HTTP adapter maps the result to a response DTO with `201 Created`.
+8. The frontend refreshes that day's data and displays the server result.
+
+Read, edit, and delete queries also scope access to the actor. An entry ID or
+browser-supplied owner ID does not confer authorization.
+
+## 7. Accounts and security
+
+Recommend an established OpenID Connect provider, avoiding password storage in
+the first milestone. Provider choice and login methods remain open. Use a maintained
+OIDC client: authorization-code flow, PKCE, state/nonce, issuer/audience validation,
+and allowlisted callback redirects. Identity integration stays in outer adapters.
+
+Map verified `(issuer, subject)` to a local user ID with a unique constraint.
+Emails are profile attributes, not identity keys. After authentication, issue a
+server-managed opaque session and store its token hash in PostgreSQL. Use
+`Secure`, `HttpOnly`, `SameSite=Lax` cookies in production. Keep tokens out of
+localStorage; rotate sessions on login, revoke on logout, and enforce expiry.
+
+The HTTP layer produces a verified application actor. Every private use case
+requires it; private repository operations require its user ID. Never trust a
+request's `user_id` as owner. Use owner-scoped SQL and relational constraints
+to prevent cross-user references. Frontend route guards do not enforce access.
+
+Protect state-changing cookie-authenticated requests with CSRF tokens and origin
+validation. SameSite is additional protection; GET must not mutate data. Prefer
+a single public origin for web and API rather than permissive CORS.
+
+Account deletion must revoke sessions and follow an explicit data policy. Session
+durations, account creation, provider-side deletion, and backup retention must be
+settled before release. Follow [OIDC][oidc], [session guidance][sessions], and
+[CSRF guidance][csrf] when implementing these recommendations.
+
+## 8. HTTP contract
+
+Proposed endpoints; none are implemented:
+
+| Method | Path | Responsibility |
+| :--- | :--- | :--- |
+| GET | `/api/v1/session` | Safe session status |
+| GET / POST | `/api/v1/foods` | List/create the actor's foods |
+| GET | `/api/v1/diary?date=YYYY-MM-DD` | Actor's entries and daily total |
+| POST | `/api/v1/diary/entries` | Save a portion and nutrition snapshot |
+| PATCH / DELETE | `/api/v1/diary/entries/{id}` | Edit/delete an owned entry |
+
+Specify authentication routes when choosing the provider. Bound body size, names,
+pagination, and list sizes. DTO validation complements domain invariants.
+
+Use one error envelope: code, safe message, optional field errors, request ID.
+Map malformed input to 400, domain validation to 422, unauthenticated requests to
+401, missing/inaccessible resources to 404, conflicts to 409, unexpected failures
+to a generic 500. Normalize extractor rejections; never return raw SQL errors.
+
+Define OpenAPI with the first handlers and generate TypeScript wire types from
+it. Parse network JSON at runtime: generated types do not validate external data.
+Commit the contract and generated types, checking drift once tooling exists.
+
+## 9. React boundaries
+
+Organize by feature, without copying every backend layer into the UI. Each feature
+owns components, hooks, model, and API adapter. Components render typed state and
+trigger actions; adapters fetch, validate, and map wire data. Plain model functions
+handle reusable presentation logic.
+
+Features expose a small public surface; do not import another feature's internals.
+`shared/` holds genuinely reused code, and `app/` composes routes/providers.
+
+Keep form strings and selection state local. The server owns saved entries and
+nutrition totals; do not duplicate business calculations in TypeScript. Handle
+loading, empty, unauthenticated, error, and success states. Cancel obsolete requests
+and prevent stale responses replacing the selected day's data. Begin with pessimistic
+mutations; introduce caching or optimistic updates for a demonstrated need.
+
+## 10. Deployment
+
+Serve frontend assets and `/api` behind one TLS origin; keep PostgreSQL private.
+Validate configuration at startup. Secrets never enter source control or the
+public Vite bundle. Use a bounded pool, request timeouts, graceful shutdown, and
+structured request IDs. Do not log diary contents, full bodies, credentials, or tokens.
+
+Rate-limit authentication and writes before public exposure. Separate liveness
+from readiness. Never hold a database transaction while calling the identity provider.
+Run versioned migrations as a controlled deployment step with a separate role;
+the runtime database role must not have schema-change privileges.
+
+Document backups, restore verification, retention, and safe migration rollout
+before launch. Public readiness must not expose internal configuration.
+
+## 11. Verification and open decisions
+
+Plan verification at each boundary: arithmetic/rounding, fake-port use cases,
+actual PostgreSQL constraints/transactions, HTTP validation and cross-user access,
+and frontend interactions. Include fractional portions, history snapshots, date
+boundaries, and one account attempting to modify another account's data.
+
+No application checks are implemented here. Unit/functional tests run only on
+explicit request. See [engineering standards](ENGINEERING.md) for intended checks.
+
+Before implementation, confirm the proposed layout/manual-entry scope, choose
+the identity provider and hosting, set operational/input bounds and retention,
+and pin toolchains plus contract-generation tooling.
+
+## References
+
+These sources inform Caloryst's recommendations; they do not prescribe this layout.
+
+- [Clean Architecture][clean]
+- [Rust fallible APIs and validated types][rust]
+- [Axum error handling][axum] and [graceful shutdown][shutdown]
+- [SQLx query checking and offline mode][sqlx]
+- [PostgreSQL numeric types][numeric] and [constraints][constraints]
+- [React state and effects][react]
+- [TypeScript strict checking][typescript]
+- [OpenID Connect][oidc], [OWASP sessions][sessions], [OWASP CSRF][csrf]
+
+[clean]: https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html
+[rust]: https://doc.rust-lang.org/book/ch09-03-to-panic-or-not-to-panic.html
+[axum]: https://docs.rs/axum/latest/axum/error_handling/index.html
+[shutdown]: https://github.com/tokio-rs/axum/tree/main/examples/graceful-shutdown
+[sqlx]: https://docs.rs/sqlx/latest/sqlx/macro.query.html
+[numeric]: https://www.postgresql.org/docs/18/datatype-numeric.html
+[constraints]: https://www.postgresql.org/docs/18/ddl-constraints.html
+[react]: https://react.dev/learn/you-might-not-need-an-effect
+[typescript]: https://www.typescriptlang.org/tsconfig/strict.html
+[oidc]: https://openid.net/specs/openid-connect-core-1_0.html
+[sessions]: https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+[csrf]: https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html

@@ -1,8 +1,12 @@
 # Caloryst — agent instructions
 
-- Read README.md and the relevant parts of docs/ARCHITECTURE.md before editing.
+- Read README.md, the relevant parts of docs/ARCHITECTURE.md, and docs/ENGINEERING.md before editing.
 - Keep changes small, readable, and limited to the requested behavior. Apply Ponytail when available.
 - The stack is proposed until explicitly accepted. Do not scaffold the application or install dependencies just to document a choice.
+- Follow Clean Architecture: application depends on domain; HTTP and PostgreSQL adapters depend inward. Keep Axum, SQLx, Tokio, and wire DTOs out of the domain/application core.
+- Define narrow persistence ports in the application layer. Keep transactions in adapters and dependency wiring in startup. Avoid a generic repository or service locator.
+- Caloryst targets a multi-user service. Every private use case requires a verified actor; every private storage operation scopes access to that actor. Never trust browser-supplied ownership IDs.
+- Organize React code by feature. Separate transport from rendering, keep UI state local, and use strict TypeScript with runtime validation of external data.
 - Use idiomatic TypeScript for the proposed React frontend and idiomatic Rust for the proposed backend. Avoid unsafe Rust unless necessary; document its invariants.
 - Never commit secrets, database dumps, personal food diaries, or real user health data.
 - Validate input at API boundaries, use parameterized SQL, and preserve existing data during migrations.
