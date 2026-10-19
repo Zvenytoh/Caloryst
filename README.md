@@ -101,6 +101,7 @@ provider will be selected before scaffolding. The
 - [ ] Add the PWA manifest, install icons, public-shell caching, and update flow.
 - [ ] Deliver an authenticated food-to-diary vertical slice.
 - [ ] Add daily summaries and entry editing/deletion.
+- [ ] Import the CIQUAL and Open Food Facts catalogs with source attribution.
 - [ ] Complete release checks, deployment instructions, and data lifecycle controls.
 
 ## Development

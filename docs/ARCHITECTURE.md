@@ -17,6 +17,21 @@ gram-based portion in their diary, and reads the day's entries and total.
 Manual food entry avoids choosing an external catalog before reviewing its
 license, quality, and availability.
 
+### Planned food catalogs
+
+After the manual workflow, Caloryst will import two reference catalogs:
+[CIQUAL](https://ciqual.anses.fr/) (ANSES generic foods, Licence Ouverte /
+Etalab 2.0) and [Open Food Facts](https://fr.openfoodfacts.org/data) (branded
+products and barcodes, ODbL). User-created foods remain available.
+
+- Catalog foods are shared and read-only; user foods stay private to their owner.
+- Record the source (`ciqual`, `openfoodfacts`, `user`) and source identifier on every food.
+- Display attribution for both sources in the app and the README.
+- ODbL: a derived Open Food Facts database made public must be shared under ODbL.
+  Private diaries are not part of that database.
+- Imports run as a separate command, never in request handlers, and never rewrite
+  diary snapshots. The Open Food Facts subset to import is still open.
+
 Start with one backend process and one PostgreSQL database. Use compile-time
 boundaries rather than distributed services. An event bus, generic CRUD framework,
 and repository for every table are unnecessary at this stage.
