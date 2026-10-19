@@ -1,0 +1,23 @@
+# Local credentials and data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.sql.gz
+*.dump
+
+# Build output
+node_modules/
+dist/
+target/
+coverage/
+
+# Local generated analysis
+graphify-out/
+.graphify/
+
+# Editor / OS files
+.idea/
+.DS_Store
+Thumbs.db
