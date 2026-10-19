@@ -13,10 +13,15 @@ use axum::{
     routing::{get, patch, post},
 };
 use caloryst_application::{self as app, Actor, Entry, Error};
-use caloryst_domain::{Amounts, Goals, Invalid, format_date, round1};
-use rust_decimal::Decimal;
+use caloryst_domain::{
+    Amounts, Details, Goals, Invalid, NutrientTotal, Profile, ProfileInput, Recommendation,
+    Reference, format_date, nutrient_totals, round1,
+};
+use rust_decimal::{Decimal, RoundingStrategy};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
+use std::collections::BTreeMap;
+use time::{Date, OffsetDateTime};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -161,6 +166,39 @@ fn dec1(value: Decimal) -> String {
     }
 }
 
+/// Detailed nutrient amounts keep two decimals: micrograms matter ("0.36").
+fn dec2(value: Decimal) -> String {
+    let rounded = value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero);
+    if rounded.is_zero() {
+        "0".into()
+    } else {
+        rounded.normalize().to_string()
+    }
+}
+
+fn details_json(details: &Details) -> Value {
+    Value::Object(
+        details
+            .iter()
+            .map(|(n, v)| (n.key().to_owned(), Value::String(dec(v))))
+            .collect::<Map<_, _>>(),
+    )
+}
+
+fn reference_json(reference: Reference) -> Value {
+    match reference {
+        Reference::AtLeast(v) => json!({ "kind": "atLeast", "amount": dec(v) }),
+        Reference::AtMost(v) => json!({ "kind": "atMost", "amount": dec(v) }),
+    }
+}
+
+fn nutrient_totals_json(totals: &[NutrientTotal]) -> Value {
+    totals
+        .iter()
+        .map(|t| json!({ "key": t.nutrient.key(), "amount": dec2(t.amount), "known": t.known, "total": t.total }))
+        .collect()
+}
+
 fn food_json(food: &app::Food) -> Value {
     let n = &food.nutrition;
     json!({
@@ -170,6 +208,7 @@ fn food_json(food: &app::Food) -> Value {
         "proteinPer100g": dec(n.protein()),
         "carbsPer100g": dec(n.carbs()),
         "fatPer100g": dec(n.fat()),
+        "details": details_json(n.details()),
     })
 }
 
@@ -286,6 +325,8 @@ struct NewFoodBody {
     protein_per_100g: String,
     carbs_per_100g: String,
     fat_per_100g: String,
+    #[serde(default)]
+    details: BTreeMap<String, String>,
 }
 
 async fn create_food(
@@ -300,6 +341,11 @@ async fn create_food(
         protein: &b.protein_per_100g,
         carbs: &b.carbs_per_100g,
         fat: &b.fat_per_100g,
+        details: b
+            .details
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect(),
     };
     let food = app::create_food(&s.store, &a.actor, input).await?;
     Ok((StatusCode::CREATED, Json(food_json(&food))))
@@ -361,6 +407,116 @@ async fn diary(State(s): State<AppState>, a: Authed, Query(q): Query<DateQuery>)
             "entries": m.entries.iter().map(|e| entry_json(e)).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
         "activities": day.activities.iter().map(activity_json).collect::<Vec<_>>(),
+        "nutrients": nutrient_totals_json(&nutrient_totals(&day.entries.iter().map(|e| &e.portion).collect::<Vec<_>>())),
+    })))
+}
+
+/// Server date used for ages and recommendations.
+fn today() -> Date {
+    OffsetDateTime::now_utc().date()
+}
+
+fn profile_json(profile: Option<&(Profile, Recommendation)>) -> Value {
+    match profile {
+        None => json!({ "profile": null, "recommendation": null }),
+        Some((p, r)) => json!({
+            "profile": {
+                "sex": p.sex.as_str(),
+                "birthYear": p.birth_year,
+                "heightCm": dec(p.height_cm),
+                "weightKg": dec(p.weight_kg),
+                "activity": p.activity.as_str(),
+                "objective": p.objective.as_str(),
+            },
+            "recommendation": {
+                "restingKcal": dec(r.resting_kcal),
+                "maintenanceKcal": dec(r.maintenance_kcal),
+                "goals": goals_json(&r.goals),
+            },
+        }),
+    }
+}
+
+async fn get_profile(State(s): State<AppState>, a: Authed) -> ApiResult {
+    Ok(Json(profile_json(
+        app::profile(&s.store, &a.actor, today()).await?.as_ref(),
+    )))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProfileBody {
+    sex: String,
+    birth_year: i32,
+    height_cm: String,
+    weight_kg: String,
+    activity: String,
+    objective: String,
+}
+
+async fn put_profile(
+    State(s): State<AppState>,
+    a: Authed,
+    body: Result<Json<ProfileBody>, JsonRejection>,
+) -> ApiResult {
+    let Json(b) = body?;
+    let input = ProfileInput {
+        sex: &b.sex,
+        birth_year: b.birth_year,
+        height_cm: &b.height_cm,
+        weight_kg: &b.weight_kg,
+        activity: &b.activity,
+        objective: &b.objective,
+    };
+    let saved = app::set_profile(&s.store, &a.actor, input, today()).await?;
+    Ok(Json(profile_json(Some(&saved))))
+}
+
+async fn analysis(State(s): State<AppState>, a: Authed, Query(q): Query<DateQuery>) -> ApiResult {
+    let view = app::analysis(&s.store, &a.actor, &q.date).await?;
+    let an = &view.analysis;
+    let day = nutrient_totals(
+        &view
+            .day_entries
+            .iter()
+            .map(|e| &e.portion)
+            .collect::<Vec<_>>(),
+    );
+    let opt = |v: Option<Decimal>| v.map(dec1);
+    Ok(Json(json!({
+        "from": format_date(view.from),
+        "to": format_date(view.to),
+        "periodDays": an.period_days,
+        "daysLogged": an.days_logged,
+        "goals": goals_json(&view.goals),
+        "profile": profile_json(view.profile.as_ref()),
+        "averages": {
+            "kcal": dec1(an.avg_kcal),
+            "burnedKcal": dec1(an.avg_burned_kcal),
+            "netKcal": dec1(an.avg_kcal - an.avg_burned_kcal),
+            "proteinG": dec1(an.avg_protein),
+            "carbsG": dec1(an.avg_carbs),
+            "fatG": dec1(an.avg_fat),
+            "proteinPerKg": an.protein_per_kg.map(dec2),
+        },
+        "energySplit": an.energy_split.map(|(p, c, f)| json!({ "proteinPct": dec1(p), "carbsPct": dec1(c), "fatPct": dec1(f) })),
+        "findings": an.findings.iter().map(|f| json!({
+            "topic": f.topic.as_str(),
+            "status": f.status.as_str(),
+            "value": dec1(f.value),
+            "min": opt(f.min),
+            "max": opt(f.max),
+        })).collect::<Vec<_>>(),
+        "nutrients": an.nutrients.iter().zip(&day).map(|(w, d)| json!({
+            "key": w.nutrient.key(),
+            "reference": reference_json(w.reference),
+            "dayAmount": dec2(d.amount),
+            "dayKnown": d.known,
+            "dayTotal": d.total,
+            "weekAverage": dec2(w.average),
+            "weekKnown": w.known,
+            "weekTotal": w.total,
+        })).collect::<Vec<_>>(),
     })))
 }
 
@@ -476,6 +632,8 @@ pub fn api(state: AppState) -> Router {
             patch(update_entry).delete(delete_entry),
         )
         .route("/water", post(change_water))
+        .route("/profile", get(get_profile).put(put_profile))
+        .route("/analysis", get(analysis))
         .route("/activities", post(add_activity))
         .route("/activities/{id}", axum::routing::delete(delete_activity))
         .fallback(not_found)

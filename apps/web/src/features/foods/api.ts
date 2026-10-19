@@ -1,7 +1,21 @@
-import { api, list, str } from '../../shared/api'
+import { api, isObject, list, str } from '../../shared/api'
 
-export type Food = { id: string; name: string; kcalPer100g: string; proteinPer100g: string; carbsPer100g: string; fatPer100g: string }
+export type Food = {
+  id: string
+  name: string
+  kcalPer100g: string
+  proteinPer100g: string
+  carbsPer100g: string
+  fatPer100g: string
+  /** Known detailed nutrients per 100 g, by nutrient key; missing keys are unknown. */
+  details: Record<string, string>
+}
 export type NewFood = Omit<Food, 'id'>
+
+function details(value: unknown): Record<string, string> {
+  if (!isObject(value)) return {}
+  return Object.fromEntries(Object.entries(value).filter((e): e is [string, string] => typeof e[1] === 'string'))
+}
 
 const toFood = (o: Record<string, unknown>): Food => ({
   id: str(o, 'id'),
@@ -10,6 +24,7 @@ const toFood = (o: Record<string, unknown>): Food => ({
   proteinPer100g: str(o, 'proteinPer100g'),
   carbsPer100g: str(o, 'carbsPer100g'),
   fatPer100g: str(o, 'fatPer100g'),
+  details: details(o.details),
 })
 
 export async function fetchFoods(signal?: AbortSignal): Promise<Food[]> {
@@ -17,7 +32,7 @@ export async function fetchFoods(signal?: AbortSignal): Promise<Food[]> {
   return body ? list(body, 'foods').map(toFood) : []
 }
 
-/** Throws ApiError with field errors keyed like NewFood. */
+/** Throws ApiError with field errors keyed like NewFood or by nutrient key. */
 export async function createFood(food: NewFood): Promise<Food> {
   const body = await api('/foods', { method: 'POST', body: JSON.stringify(food) })
   if (!body) throw new Error('Réponse vide.')

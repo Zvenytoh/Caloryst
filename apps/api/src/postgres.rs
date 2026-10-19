@@ -1,11 +1,15 @@
 //! PostgreSQL adapter for the application ports. Every query is scoped to its owner.
 
 use caloryst_application::{
-    Activity, DiaryStore, Entry, Food, FoodStore, GoalsStore, StoreError, StoreResult,
+    Activity, DiaryStore, Entry, Food, FoodStore, GoalsStore, ProfileStore, StoreError, StoreResult,
 };
-use caloryst_domain::{FoodName, Goals, Grams, Meal, Nutrition, Portion};
+use caloryst_domain::{
+    Activity as ActivityLevel, Details, FoodName, Goals, Grams, Meal, Nutrition, Objective,
+    Portion, Profile, Sex,
+};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
+use std::collections::BTreeMap;
 use time::Date;
 use uuid::Uuid;
 
@@ -41,49 +45,63 @@ fn affected(result: sqlx::postgres::PgQueryResult) -> StoreResult<()> {
     }
 }
 
-type NutritionRow = (Decimal, Decimal, Decimal, Decimal);
-
-fn nutrition((kcal, protein, carbs, fat): NutritionRow) -> StoreResult<Nutrition> {
-    Nutrition::new(kcal, protein, carbs, fat).map_err(corrupt("nutrition"))
+/// Details are stored as a JSON object of decimal strings.
+fn details_json(details: &Details) -> String {
+    let map: BTreeMap<&str, String> = details
+        .iter()
+        .map(|(n, v)| (n.key(), v.normalize().to_string()))
+        .collect();
+    serde_json::to_string(&map).unwrap_or_else(|_| "{}".into())
 }
 
-fn food(
-    (id, name, kcal, protein, carbs, fat): (Uuid, String, Decimal, Decimal, Decimal, Decimal),
-) -> StoreResult<Food> {
+fn details_from(json: &str) -> StoreResult<Details> {
+    let map: BTreeMap<String, String> = serde_json::from_str(json).map_err(corrupt("details"))?;
+    Details::parse(map.iter().map(|(k, v)| (k.as_str(), v.as_str()))).map_err(corrupt("details"))
+}
+
+type NutritionRow = (Decimal, Decimal, Decimal, Decimal, String);
+
+fn nutrition((kcal, protein, carbs, fat, details): NutritionRow) -> StoreResult<Nutrition> {
+    Nutrition::new(kcal, protein, carbs, fat, details_from(&details)?).map_err(corrupt("nutrition"))
+}
+
+type FoodRow = (Uuid, String, Decimal, Decimal, Decimal, Decimal, String);
+
+fn food((id, name, kcal, protein, carbs, fat, details): FoodRow) -> StoreResult<Food> {
     Ok(Food {
         id,
         name: FoodName::new(&name).map_err(corrupt("food"))?,
-        nutrition: nutrition((kcal, protein, carbs, fat))?,
+        nutrition: nutrition((kcal, protein, carbs, fat, details))?,
     })
 }
 
 impl FoodStore for PgStore {
     async fn list_foods(&self, owner: &str) -> StoreResult<Vec<Food>> {
-        sqlx::query_as(
-            "SELECT id, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g
+        let rows: Vec<FoodRow> = sqlx::query_as(
+            "SELECT id, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, details::text
              FROM foods WHERE owner_id = $1 ORDER BY lower(name) LIMIT 1000",
         )
         .bind(owner)
         .fetch_all(&self.pool)
         .await
-        .map_err(unavailable)?
-        .into_iter()
-        .map(food)
-        .collect()
+        .map_err(unavailable)?;
+        rows.into_iter().map(food).collect()
     }
 
     async fn insert_food(&self, owner: &str, f: &Food) -> StoreResult<()> {
+        let n = &f.nutrition;
         sqlx::query(
-            "INSERT INTO foods (id, owner_id, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            "INSERT INTO foods (id, owner_id, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, details)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)",
         )
         .bind(f.id)
         .bind(owner)
         .bind(f.name.as_str())
-        .bind(f.nutrition.kcal())
-        .bind(f.nutrition.protein())
-        .bind(f.nutrition.carbs())
-        .bind(f.nutrition.fat())
+        .bind(n.kcal())
+        .bind(n.protein())
+        .bind(n.carbs())
+        .bind(n.fat())
+        .bind(details_json(n.details()))
         .execute(&self.pool)
         .await
         .map_err(unavailable)?;
@@ -91,8 +109,8 @@ impl FoodStore for PgStore {
     }
 
     async fn food(&self, owner: &str, id: Uuid) -> StoreResult<Food> {
-        let row = sqlx::query_as(
-            "SELECT id, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g
+        let row: Option<FoodRow> = sqlx::query_as(
+            "SELECT id, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, details::text
              FROM foods WHERE owner_id = $1 AND id = $2",
         )
         .bind(owner)
@@ -105,6 +123,7 @@ impl FoodStore for PgStore {
 }
 
 type EntryRow = (
+    Date,
     Uuid,
     String,
     String,
@@ -113,40 +132,88 @@ type EntryRow = (
     Decimal,
     Decimal,
     Decimal,
+    String,
 );
 
-impl DiaryStore for PgStore {
-    async fn entries(&self, owner: &str, date: Date) -> StoreResult<Vec<Entry>> {
+fn entry(
+    (date, id, meal, food_name, grams, kcal, protein, carbs, fat, details): EntryRow,
+) -> StoreResult<(Date, Entry)> {
+    Ok((
+        date,
+        Entry {
+            id,
+            meal: Meal::parse(&meal).map_err(corrupt("entry"))?,
+            food_name,
+            portion: Portion {
+                grams: Grams::new(grams).map_err(corrupt("entry"))?,
+                nutrition: nutrition((kcal, protein, carbs, fat, details))?,
+            },
+        },
+    ))
+}
+
+impl PgStore {
+    async fn entry_rows(
+        &self,
+        owner: &str,
+        from: Date,
+        to: Date,
+    ) -> StoreResult<Vec<(Date, Entry)>> {
         let rows: Vec<EntryRow> = sqlx::query_as(
-            "SELECT id, meal, food_name, grams, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g
-             FROM diary_entries WHERE owner_id = $1 AND diary_date = $2 ORDER BY created_at, id LIMIT 500",
+            "SELECT diary_date, id, meal, food_name, grams, kcal_per_100g, protein_per_100g, carbs_per_100g,
+                    fat_per_100g, details::text
+             FROM diary_entries WHERE owner_id = $1 AND diary_date BETWEEN $2 AND $3
+             ORDER BY diary_date, created_at, id LIMIT 5000",
         )
         .bind(owner)
-        .bind(date)
+        .bind(from)
+        .bind(to)
         .fetch_all(&self.pool)
         .await
         .map_err(unavailable)?;
-        rows.into_iter()
-            .map(|(id, meal, food_name, grams, kcal, protein, carbs, fat)| {
-                Ok(Entry {
-                    id,
-                    meal: Meal::parse(&meal).map_err(corrupt("entry"))?,
-                    food_name,
-                    portion: Portion {
-                        grams: Grams::new(grams).map_err(corrupt("entry"))?,
-                        nutrition: nutrition((kcal, protein, carbs, fat))?,
-                    },
-                })
-            })
-            .collect()
+        rows.into_iter().map(entry).collect()
+    }
+
+    async fn activity_rows(
+        &self,
+        owner: &str,
+        from: Date,
+        to: Date,
+    ) -> StoreResult<Vec<(Date, Activity)>> {
+        let rows: Vec<(Date, Uuid, String, Decimal)> = sqlx::query_as(
+            "SELECT diary_date, id, name, kcal FROM activities
+             WHERE owner_id = $1 AND diary_date BETWEEN $2 AND $3 ORDER BY diary_date, created_at, id LIMIT 2000",
+        )
+        .bind(owner)
+        .bind(from)
+        .bind(to)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(unavailable)?;
+        Ok(rows
+            .into_iter()
+            .map(|(date, id, name, kcal)| (date, Activity { id, name, kcal }))
+            .collect())
+    }
+}
+
+impl DiaryStore for PgStore {
+    async fn entries(&self, owner: &str, date: Date) -> StoreResult<Vec<Entry>> {
+        Ok(self
+            .entry_rows(owner, date, date)
+            .await?
+            .into_iter()
+            .map(|(_, e)| e)
+            .collect())
     }
 
     async fn insert_entry(&self, owner: &str, date: Date, e: &Entry) -> StoreResult<()> {
         let n = &e.portion.nutrition;
         sqlx::query(
             "INSERT INTO diary_entries
-               (id, owner_id, diary_date, meal, food_name, grams, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+               (id, owner_id, diary_date, meal, food_name, grams, kcal_per_100g, protein_per_100g, carbs_per_100g,
+                fat_per_100g, details)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)",
         )
         .bind(e.id)
         .bind(owner)
@@ -158,6 +225,7 @@ impl DiaryStore for PgStore {
         .bind(n.protein())
         .bind(n.carbs())
         .bind(n.fat())
+        .bind(details_json(n.details()))
         .execute(&self.pool)
         .await
         .map_err(unavailable)?;
@@ -165,13 +233,15 @@ impl DiaryStore for PgStore {
     }
 
     async fn update_entry_grams(&self, owner: &str, id: Uuid, grams: Grams) -> StoreResult<()> {
-        let result = sqlx::query("UPDATE diary_entries SET grams = $3, updated_at = now() WHERE owner_id = $1 AND id = $2")
-            .bind(owner)
-            .bind(id)
-            .bind(grams.value())
-            .execute(&self.pool)
-            .await
-            .map_err(unavailable)?;
+        let result = sqlx::query(
+            "UPDATE diary_entries SET grams = $3, updated_at = now() WHERE owner_id = $1 AND id = $2",
+        )
+        .bind(owner)
+        .bind(id)
+        .bind(grams.value())
+        .execute(&self.pool)
+        .await
+        .map_err(unavailable)?;
         affected(result)
     }
 
@@ -220,30 +290,26 @@ impl DiaryStore for PgStore {
     }
 
     async fn activities(&self, owner: &str, date: Date) -> StoreResult<Vec<Activity>> {
-        let rows: Vec<(Uuid, String, Decimal)> = sqlx::query_as(
-            "SELECT id, name, kcal FROM activities WHERE owner_id = $1 AND diary_date = $2 ORDER BY created_at, id LIMIT 200",
-        )
-        .bind(owner)
-        .bind(date)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(unavailable)?;
-        Ok(rows
+        Ok(self
+            .activity_rows(owner, date, date)
+            .await?
             .into_iter()
-            .map(|(id, name, kcal)| Activity { id, name, kcal })
+            .map(|(_, a)| a)
             .collect())
     }
 
     async fn insert_activity(&self, owner: &str, date: Date, a: &Activity) -> StoreResult<()> {
-        sqlx::query("INSERT INTO activities (id, owner_id, diary_date, name, kcal) VALUES ($1, $2, $3, $4, $5)")
-            .bind(a.id)
-            .bind(owner)
-            .bind(date)
-            .bind(&a.name)
-            .bind(a.kcal)
-            .execute(&self.pool)
-            .await
-            .map_err(unavailable)?;
+        sqlx::query(
+            "INSERT INTO activities (id, owner_id, diary_date, name, kcal) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(a.id)
+        .bind(owner)
+        .bind(date)
+        .bind(&a.name)
+        .bind(a.kcal)
+        .execute(&self.pool)
+        .await
+        .map_err(unavailable)?;
         Ok(())
     }
 
@@ -255,6 +321,24 @@ impl DiaryStore for PgStore {
             .await
             .map_err(unavailable)?;
         affected(result)
+    }
+
+    async fn entries_between(
+        &self,
+        owner: &str,
+        from: Date,
+        to: Date,
+    ) -> StoreResult<Vec<(Date, Entry)>> {
+        self.entry_rows(owner, from, to).await
+    }
+
+    async fn activities_between(
+        &self,
+        owner: &str,
+        from: Date,
+        to: Date,
+    ) -> StoreResult<Vec<(Date, Activity)>> {
+        self.activity_rows(owner, from, to).await
     }
 }
 
@@ -287,6 +371,51 @@ impl GoalsStore for PgStore {
         .bind(g.carbs)
         .bind(g.fat)
         .bind(g.water_ml)
+        .execute(&self.pool)
+        .await
+        .map_err(unavailable)?;
+        Ok(())
+    }
+}
+
+impl ProfileStore for PgStore {
+    async fn profile(&self, owner: &str) -> StoreResult<Option<Profile>> {
+        let row: Option<(String, i32, Decimal, Decimal, String, String)> = sqlx::query_as(
+            "SELECT sex, birth_year, height_cm, weight_kg, activity, objective FROM profiles WHERE owner_id = $1",
+        )
+        .bind(owner)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(unavailable)?;
+        row.map(
+            |(sex, birth_year, height_cm, weight_kg, activity, objective)| {
+                Ok(Profile {
+                    sex: Sex::parse(&sex).map_err(corrupt("profile"))?,
+                    birth_year,
+                    height_cm,
+                    weight_kg,
+                    activity: ActivityLevel::parse(&activity).map_err(corrupt("profile"))?,
+                    objective: Objective::parse(&objective).map_err(corrupt("profile"))?,
+                })
+            },
+        )
+        .transpose()
+    }
+
+    async fn save_profile(&self, owner: &str, p: &Profile) -> StoreResult<()> {
+        sqlx::query(
+            "INSERT INTO profiles (owner_id, sex, birth_year, height_cm, weight_kg, activity, objective)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (owner_id) DO UPDATE SET sex = $2, birth_year = $3, height_cm = $4, weight_kg = $5,
+               activity = $6, objective = $7, updated_at = now()",
+        )
+        .bind(owner)
+        .bind(p.sex.as_str())
+        .bind(p.birth_year)
+        .bind(p.height_cm)
+        .bind(p.weight_kg)
+        .bind(p.activity.as_str())
+        .bind(p.objective.as_str())
         .execute(&self.pool)
         .await
         .map_err(unavailable)?;

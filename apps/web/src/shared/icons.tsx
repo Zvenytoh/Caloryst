@@ -37,6 +37,9 @@ export const SunIcon = (p: P) => <Icon {...p}><circle cx="12" cy="12" r="4" /><p
 export const MoonIcon = (p: P) => <Icon {...p}><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></Icon>
 export const LeafIcon = (p: P) => <Icon {...p}><path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14zM5 19l7-7" /></Icon>
 export const PulseIcon = (p: P) => <Icon {...p}><path d="M3 12h4l2-5 4 10 2-5h6" /></Icon>
+export const ChartIcon = (p: P) => <Icon {...p}><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></Icon>
+export const CheckIcon = (p: P) => <Icon {...p}><path d="M5 12.5l4.5 4.5L19 7.5" /></Icon>
+export const AlertIcon = (p: P) => <Icon {...p}><path d="M12 8v5M12 16.5v.5" /><circle cx="12" cy="12" r="9" /></Icon>
 
 /** A glass whose fill level shows whether it has been drunk. */
 export function GlassIcon({ full, size = 36 }: { full: boolean; size?: number }) {

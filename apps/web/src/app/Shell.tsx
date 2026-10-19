@@ -1,15 +1,17 @@
 import { useState, type ReactNode } from 'react'
+import { AnalysisPage } from '../features/analysis/AnalysisPage'
 import { DiaryPage } from '../features/diary/DiaryPage'
 import { FoodsPage } from '../features/foods/FoodsPage'
 import { ProfilePage } from '../features/goals/ProfilePage'
-import { FoodsIcon, JournalIcon, ProfileIcon } from '../shared/icons'
+import { ChartIcon, FoodsIcon, JournalIcon, ProfileIcon } from '../shared/icons'
 import { Logo } from '../shared/Logo'
 
-type Tab = 'journal' | 'foods' | 'profile'
+type Tab = 'journal' | 'foods' | 'analysis' | 'profile'
 
 const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   { id: 'journal', label: 'Journal', icon: <JournalIcon /> },
   { id: 'foods', label: 'Aliments', icon: <FoodsIcon /> },
+  { id: 'analysis', label: 'Analyse', icon: <ChartIcon /> },
   { id: 'profile', label: 'Profil', icon: <ProfileIcon /> },
 ]
 
@@ -36,6 +38,7 @@ export function Shell({ displayName, onSignOut, onUnauthenticated }: Props) {
       <main className="shell__main">
         {tab === 'journal' && <DiaryPage onUnauthenticated={onUnauthenticated} />}
         {tab === 'foods' && <FoodsPage />}
+        {tab === 'analysis' && <AnalysisPage onEditProfile={() => setTab('profile')} />}
         {tab === 'profile' && <ProfilePage displayName={displayName} onSignOut={onSignOut} />}
       </main>
     </div>

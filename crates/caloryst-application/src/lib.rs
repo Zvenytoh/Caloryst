@@ -1,12 +1,13 @@
 //! Use cases and persistence ports. Every private operation is scoped to a verified actor.
 
 use caloryst_domain::{
-    self as domain, DaySummary, FoodName, Goals, Grams, Invalid, Meal, Nutrition, Portion,
-    WATER_MAX_ML,
+    self as domain, Analysis, DayLog, DaySummary, Details, FoodName, Goals, Grams, Invalid, Meal,
+    Nutrition, Portion, Profile, ProfileInput, Recommendation, WATER_MAX_ML,
 };
 use rust_decimal::Decimal;
 use std::future::Future;
 use time::Date;
+use time::Duration;
 use uuid::Uuid;
 
 /// A user whose identity the HTTP layer has verified from a session.
@@ -132,6 +133,28 @@ pub trait DiaryStore: Send + Sync {
         owner: &str,
         id: Uuid,
     ) -> impl Future<Output = StoreResult<()>> + Send;
+    /// Entries of every day in `from..=to`, with their date.
+    fn entries_between(
+        &self,
+        owner: &str,
+        from: Date,
+        to: Date,
+    ) -> impl Future<Output = StoreResult<Vec<(Date, Entry)>>> + Send;
+    fn activities_between(
+        &self,
+        owner: &str,
+        from: Date,
+        to: Date,
+    ) -> impl Future<Output = StoreResult<Vec<(Date, Activity)>>> + Send;
+}
+
+pub trait ProfileStore: Send + Sync {
+    fn profile(&self, owner: &str) -> impl Future<Output = StoreResult<Option<Profile>>> + Send;
+    fn save_profile(
+        &self,
+        owner: &str,
+        profile: &Profile,
+    ) -> impl Future<Output = StoreResult<()>> + Send;
 }
 
 pub trait GoalsStore: Send + Sync {
@@ -149,6 +172,8 @@ pub struct NewFood<'a> {
     pub protein: &'a str,
     pub carbs: &'a str,
     pub fat: &'a str,
+    /// Detailed nutrients as (key, decimal string); empty values are unknown.
+    pub details: Vec<(&'a str, &'a str)>,
 }
 
 pub async fn list_foods(store: &impl FoodStore, actor: &Actor) -> Result<Vec<Food>, Error> {
@@ -163,7 +188,13 @@ pub async fn create_food(
     let food = Food {
         id: Uuid::new_v4(),
         name: FoodName::new(input.name)?,
-        nutrition: Nutrition::parse(input.kcal, input.protein, input.carbs, input.fat)?,
+        nutrition: Nutrition::parse(
+            input.kcal,
+            input.protein,
+            input.carbs,
+            input.fat,
+            Details::parse(input.details)?,
+        )?,
     };
     store.insert_food(actor.user_id(), &food).await?;
     Ok(food)
@@ -310,4 +341,94 @@ pub async fn delete_activity(
     Ok(store
         .delete_activity(actor.user_id(), entry_id(id)?)
         .await?)
+}
+
+/// The stored profile and, when present, the needs it implies on `today`.
+pub async fn profile(
+    store: &impl ProfileStore,
+    actor: &Actor,
+    today: Date,
+) -> Result<Option<(Profile, Recommendation)>, Error> {
+    Ok(store.profile(actor.user_id()).await?.map(|p| {
+        let r = p.recommend(today);
+        (p, r)
+    }))
+}
+
+pub async fn set_profile(
+    store: &impl ProfileStore,
+    actor: &Actor,
+    input: ProfileInput<'_>,
+    today: Date,
+) -> Result<(Profile, Recommendation), Error> {
+    let profile = Profile::parse(input, today)?;
+    store.save_profile(actor.user_id(), &profile).await?;
+    let recommendation = profile.recommend(today);
+    Ok((profile, recommendation))
+}
+
+pub const ANALYSIS_DAYS: i64 = 7;
+
+pub struct AnalysisView {
+    pub from: Date,
+    pub to: Date,
+    pub goals: Goals,
+    pub profile: Option<(Profile, Recommendation)>,
+    /// Entries of the last day, for its detailed nutrients.
+    pub day_entries: Vec<Entry>,
+    pub analysis: Analysis,
+}
+
+/// Judges the 7 days ending on `date` against the user's goals and profile.
+pub async fn analysis<S: DiaryStore + GoalsStore + ProfileStore>(
+    store: &S,
+    actor: &Actor,
+    date: &str,
+) -> Result<AnalysisView, Error> {
+    let to = domain::parse_date(date)?;
+    let from = to - Duration::days(ANALYSIS_DAYS - 1);
+    let owner = actor.user_id();
+    let goals = store.goals(owner).await?.unwrap_or_default();
+    let profile = store.profile(owner).await?.map(|p| {
+        let r = p.recommend(to);
+        (p, r)
+    });
+    let entries = store.entries_between(owner, from, to).await?;
+    let activities = store.activities_between(owner, from, to).await?;
+    let days: Vec<DayLog<'_>> = (0..ANALYSIS_DAYS)
+        .map(|i| {
+            let day = from + Duration::days(i);
+            DayLog {
+                portions: entries
+                    .iter()
+                    .filter(|(d, _)| *d == day)
+                    .map(|(_, e)| &e.portion)
+                    .collect(),
+                burned_kcal: activities
+                    .iter()
+                    .filter(|(d, _)| *d == day)
+                    .map(|(_, a)| a.kcal)
+                    .sum(),
+            }
+        })
+        .collect();
+    let analysis = domain::analyze(
+        &goals,
+        profile.as_ref().map(|(p, _)| p),
+        ANALYSIS_DAYS as usize,
+        &days,
+    );
+    let day_entries = entries
+        .iter()
+        .filter(|(d, _)| *d == to)
+        .map(|(_, e)| e.clone())
+        .collect();
+    Ok(AnalysisView {
+        from,
+        to,
+        goals,
+        profile,
+        day_entries,
+        analysis,
+    })
 }

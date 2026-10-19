@@ -117,22 +117,22 @@ The web app needs Node.js 20.19+ (or 22.12+) and npm:
 ```sh
 cd apps/web
 npm install
-npm run dev        # http://localhost:5173 with the in-memory development API
+npm run dev        # http://localhost:5173, /api proxied to the Rust API
 npm run typecheck  # strict TypeScript
 npm run lint       # oxlint, including React Hooks rules
 npm run build      # production bundle and service worker in dist/
-npm run preview    # serve the production build with the development API
+npm run preview    # serve the production build, /api proxied to the Rust API
 ```
 
-Without `KALO_API_URL`, `apps/web/dev/mock-api.ts` answers `/api/v1` in memory
-(data lost on restart). The service worker is registered only in production builds.
+The dev server proxies `/api` to `http://localhost:8080` (override with `KALO_API_URL`).
+The service worker is registered only in production builds.
 
 The API needs Rust 1.99.1 (pinned in `rust-toolchain.toml`) and PostgreSQL 17:
 
 ```sh
 cp apps/api/.env.example apps/api/.env   # then set DATABASE_URL
 cargo run -p caloryst-api                # http://localhost:8080, applies migrations
-KALO_API_URL=http://localhost:8080 npm --prefix apps/web run dev
+npm --prefix apps/web run dev            # http://localhost:5173
 cargo fmt --all --check
 cargo clippy --all-targets --locked -- -D warnings
 ```
@@ -149,7 +149,9 @@ Dokploy, PostgreSQL, domain and Better Auth setup.
 
 The web app uses the working name **Kalo** (logo masters and icons in
 `branding/kalo/`). Beyond the first milestone, the API also covers macronutrients
-per food, meals, daily goals, water, and manual activities.
+per food, detailed nutrients (fibre, sugars, saturated fat, salt, vitamins, minerals),
+meals, daily goals, water, manual activities, a body profile with estimated needs,
+and a 7-day analysis against the chosen objective.
 
 | Document | Read it for |
 | :--- | :--- |

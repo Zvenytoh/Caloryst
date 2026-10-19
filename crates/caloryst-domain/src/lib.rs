@@ -2,6 +2,15 @@
 //!
 //! Pure and synchronous: no storage, HTTP, clock or framework types.
 
+mod nutrients;
+mod profile;
+
+pub use nutrients::{Details, Nutrient, NutrientTotal, Reference, nutrient_totals};
+pub use profile::{
+    Activity, Analysis, DayLog, Finding, NutrientAverage, Objective, Profile, ProfileInput,
+    Recommendation, Sex, Status, Topic, analyze,
+};
+
 use rust_decimal::{Decimal, RoundingStrategy};
 use std::str::FromStr;
 use time::{Date, macros::format_description};
@@ -131,20 +140,27 @@ impl FoodName {
     }
 }
 
-/// Energy and macronutrients per 100 g.
+/// Energy, macronutrients and known detailed nutrients per 100 g.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Nutrition {
     kcal: Decimal,
     protein: Decimal,
     carbs: Decimal,
     fat: Decimal,
+    details: Details,
 }
 
 impl Nutrition {
     const KCAL_MESSAGE: &'static str = "Entre 0 et 900 kcal, 3 décimales maximum.";
     const MACRO_MESSAGE: &'static str = "Entre 0 et 100 g, 3 décimales maximum.";
 
-    pub fn new(kcal: Decimal, protein: Decimal, carbs: Decimal, fat: Decimal) -> Result<Self> {
+    pub fn new(
+        kcal: Decimal,
+        protein: Decimal,
+        carbs: Decimal,
+        fat: Decimal,
+        details: Details,
+    ) -> Result<Self> {
         let hundred = Decimal::ONE_HUNDRED;
         let kcal = in_range(kcal, Decimal::from(900), "kcalPer100g", Self::KCAL_MESSAGE)?;
         let protein = in_range(protein, hundred, "proteinPer100g", Self::MACRO_MESSAGE)?;
@@ -156,21 +172,45 @@ impl Nutrition {
                 "Protéines + glucides + lipides ne peuvent dépasser 100 g.",
             ));
         }
+        if details.get(Nutrient::Sugars).is_some_and(|s| s > carbs) {
+            return Err(invalid(
+                "sugarsG",
+                "Les sucres ne peuvent dépasser les glucides.",
+            ));
+        }
+        if details.get(Nutrient::SaturatedFat).is_some_and(|s| s > fat) {
+            return Err(invalid(
+                "saturatedFatG",
+                "Les acides gras saturés ne peuvent dépasser les lipides.",
+            ));
+        }
         Ok(Self {
             kcal,
             protein,
             carbs,
             fat,
+            details,
         })
     }
 
-    pub fn parse(kcal: &str, protein: &str, carbs: &str, fat: &str) -> Result<Self> {
+    pub fn parse(
+        kcal: &str,
+        protein: &str,
+        carbs: &str,
+        fat: &str,
+        details: Details,
+    ) -> Result<Self> {
         Self::new(
             parse_decimal(kcal, "kcalPer100g", Self::KCAL_MESSAGE)?,
             parse_decimal(protein, "proteinPer100g", Self::MACRO_MESSAGE)?,
             parse_decimal(carbs, "carbsPer100g", Self::MACRO_MESSAGE)?,
             parse_decimal(fat, "fatPer100g", Self::MACRO_MESSAGE)?,
+            details,
         )
+    }
+
+    pub fn details(&self) -> &Details {
+        &self.details
     }
 
     pub fn kcal(&self) -> Decimal {
@@ -239,6 +279,14 @@ impl Portion {
             carbs: self.nutrition.carbs * factor,
             fat: self.nutrition.fat * factor,
         }
+    }
+
+    /// Amount of a detailed nutrient in this portion, if the food records it.
+    pub fn nutrient(&self, nutrient: Nutrient) -> Option<Decimal> {
+        self.nutrition
+            .details
+            .get(nutrient)
+            .map(|v| v * self.grams.value() / Decimal::ONE_HUNDRED)
     }
 }
 
@@ -371,7 +419,7 @@ mod tests {
     fn portion(grams: &str, kcal: &str) -> Portion {
         Portion {
             grams: Grams::parse(grams).unwrap(),
-            nutrition: Nutrition::parse(kcal, "0", "0", "0").unwrap(),
+            nutrition: Nutrition::parse(kcal, "0", "0", "0", Details::default()).unwrap(),
         }
     }
 
@@ -388,7 +436,10 @@ mod tests {
         assert!(Grams::parse("1.2345").is_err());
         assert!(Grams::parse("1.").is_err());
         assert!(Grams::parse("-1").is_err());
-        assert!(Nutrition::parse("100", "60", "50", "0").is_err());
+        assert!(Nutrition::parse("100", "60", "50", "0", Details::default()).is_err());
+        let sugary = Details::parse([("sugarsG", "30")]).unwrap();
+        assert!(Nutrition::parse("100", "0", "20", "0", sugary).is_err());
+        assert!(Details::parse([("unknown", "1")]).is_err());
         assert!(parse_date("2026-02-30").is_err());
         assert!(water_delta(2001).is_err());
     }
