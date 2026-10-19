@@ -35,9 +35,8 @@ stores account mappings, food records, and private diary entries.
 
 ### Project status
 
-**Architecture design.** The repository currently contains documentation and
-branding. There is no runnable frontend, API, database schema, or release yet.
-All capabilities and source directories described below are planned.
+**Early development.** The React PWA in `apps/web` runs against an in-memory
+development API. There is no Rust API, database schema, or release yet.
 
 ## Planned first release
 
@@ -97,10 +96,10 @@ provider will be selected before scaffolding. The
 - [x] Repository, license, logo, and contributor documentation.
 - [x] Initial Clean Architecture specification and engineering standards.
 - [ ] Confirm identity provider, hosting constraints, and retention policy.
-- [ ] Scaffold the Rust workspace and React + TypeScript application.
-- [ ] Add the PWA manifest, install icons, public-shell caching, and update flow.
-- [ ] Deliver an authenticated food-to-diary vertical slice.
-- [ ] Add daily summaries and entry editing/deletion.
+- [x] Scaffold the React + TypeScript application.
+- [x] Add the PWA manifest, install icons, public-shell caching, and update flow.
+- [x] Build the food-to-diary interface, daily summary, and entry editing/deletion (against the development API).
+- [ ] Scaffold the Rust workspace and deliver the real API and PostgreSQL schema.
 - [ ] Import the CIQUAL and Open Food Facts catalogs with source attribution.
 - [ ] Complete release checks, deployment instructions, and data lifecycle controls.
 
@@ -111,8 +110,22 @@ git clone https://github.com/Zvenytoh/Caloryst.git
 cd Caloryst
 ```
 
-Application setup and build commands will be added with the implementation.
-No application checks or CI workflows exist yet.
+The web app needs Node.js 20.19+ (or 22.12+) and npm:
+
+```sh
+cd apps/web
+npm install
+npm run dev        # http://localhost:5173 with the in-memory development API
+npm run typecheck  # strict TypeScript
+npm run lint       # oxlint, including React Hooks rules
+npm run build      # production bundle and service worker in dist/
+npm run preview    # serve the production build with the development API
+```
+
+`apps/web/dev/mock-api.ts` implements the planned `/api/v1` contract in memory for
+development and preview only; data is lost on restart and "Se connecter" signs in
+a demo account without a password. The service worker is registered only in
+production builds. No Rust checks or CI workflows exist yet.
 
 | Document | Read it for |
 | :--- | :--- |

@@ -1,0 +1,153 @@
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { ApiError, errorMessage } from '../../shared/api'
+import { formatDay, formatKcal, toDecimal } from '../../shared/format'
+import { fetchFoods, type Food } from '../foods/api'
+import { NewFoodForm } from '../foods/NewFoodForm'
+import { recordEntry } from './api'
+
+type Props = { date: string; onClose: () => void; onAdded: () => void }
+
+const QUICK_GRAMS = ['50', '100', '150', '200']
+
+export function AddEntryDialog({ date, onClose, onAdded }: Props) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const search = useRef<HTMLInputElement>(null)
+  const [foods, setFoods] = useState<Food[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState<Food | null>(null)
+  const [grams, setGrams] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    dialog.current?.showModal()
+    // showModal() focuses the first focusable element (the close button); start on the search instead.
+    search.current?.focus()
+    const controller = new AbortController()
+    fetchFoods(controller.signal)
+      .then(setFoods)
+      .catch((err: unknown) => !controller.signal.aborted && setLoadError(errorMessage(err)))
+    return () => controller.abort()
+  }, [])
+
+  const needle = query.trim().toLocaleLowerCase('fr')
+  const matches = foods?.filter((f) => f.name.toLocaleLowerCase('fr').includes(needle)) ?? []
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!selected) return setErrors({ food: 'Choisissez un aliment.' })
+    setBusy(true)
+    setErrors({})
+    try {
+      await recordEntry(selected.id, toDecimal(grams), date)
+      onAdded()
+      onClose()
+    } catch (err: unknown) {
+      setErrors(err instanceof ApiError ? { form: err.message, ...err.fieldErrors } : { form: errorMessage(err) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const created = (food: Food) => {
+    setFoods((list) => [...(list ?? []), food])
+    setSelected(food)
+    setCreating(false)
+  }
+
+  return (
+    <dialog ref={dialog} className="sheet" aria-labelledby="add-title" onClose={onClose}>
+      <div className="sheet__head">
+        <div>
+          <h2 id="add-title">Ajouter une portion</h2>
+          <p className="muted">{formatDay(date)}</p>
+        </div>
+        <button type="button" className="icon-button" aria-label="Fermer" onClick={() => dialog.current?.close()}>
+          ×
+        </button>
+      </div>
+
+      {creating ? (
+        <NewFoodForm initialName={query.trim()} onCreated={created} onCancel={() => setCreating(false)} />
+      ) : (
+        <form className="sheet__body" onSubmit={submit} noValidate>
+          <label className="field">
+            <span className="field__label">Aliment</span>
+            <input
+              className="input"
+              type="search"
+              placeholder="Rechercher dans vos aliments"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              ref={search}
+            />
+          </label>
+
+          <fieldset className="food-picker" aria-describedby={errors.food ? 'food-error' : undefined}>
+            <legend className="visually-hidden">Choisir un aliment</legend>
+            {!foods && !loadError && <p className="muted">Chargement de vos aliments…</p>}
+            {loadError && <p role="alert" className="field-error">{loadError}</p>}
+            {foods && matches.length === 0 && <p className="muted">{foods.length ? 'Aucun aliment ne correspond.' : 'Vous n’avez encore aucun aliment.'}</p>}
+            {matches.map((food) => (
+              <label key={food.id} className="food-option">
+                <input type="radio" name="food" checked={selected?.id === food.id} onChange={() => setSelected(food)} />
+                <span className="food-option__name">{food.name}</span>
+                <span className="muted">{formatKcal(food.kcalPer100g)} kcal/100 g</span>
+              </label>
+            ))}
+          </fieldset>
+          {errors.food && (
+            <p id="food-error" role="alert" className="field-error">
+              {errors.food}
+            </p>
+          )}
+          <button type="button" className="link-button" onClick={() => setCreating(true)}>
+            + Créer un aliment{query.trim() ? ` « ${query.trim()} »` : ''}
+          </button>
+
+          <label className="field">
+            <span className="field__label">Portion (g)</span>
+            <input
+              className="input input--grams"
+              inputMode="decimal"
+              placeholder="ex. 150"
+              value={grams}
+              onChange={(e) => setGrams(e.target.value)}
+              aria-invalid={Boolean(errors.grams)}
+              aria-describedby={errors.grams ? 'grams-error' : undefined}
+              required
+            />
+          </label>
+          <div className="chips" role="group" aria-label="Portions rapides">
+            {QUICK_GRAMS.map((g) => (
+              <button key={g} type="button" className={`chip${grams === g ? ' chip--on' : ''}`} aria-pressed={grams === g} onClick={() => setGrams(g)}>
+                {g} g
+              </button>
+            ))}
+          </div>
+          {errors.grams && (
+            <p id="grams-error" role="alert" className="field-error">
+              {errors.grams}
+            </p>
+          )}
+          {errors.form && !errors.grams && (
+            <p role="alert" className="field-error">
+              {errors.form}
+            </p>
+          )}
+
+          <div className="sheet__actions">
+            <button type="button" className="button button--ghost" onClick={() => dialog.current?.close()}>
+              Annuler
+            </button>
+            <button type="submit" className="button" disabled={busy || !selected || !grams.trim()}>
+              {busy ? 'Ajout…' : 'Ajouter au journal'}
+            </button>
+          </div>
+        </form>
+      )}
+    </dialog>
+  )
+}
