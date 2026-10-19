@@ -28,7 +28,7 @@ export function list(obj: Json, key: string): Json[] {
   return value
 }
 
-/** Calls the Caloryst API. Resolves to parsed JSON (or null for 204) and throws ApiError otherwise. */
+/** Calls the Kalo API. Resolves to parsed JSON (or null for 204) and throws ApiError otherwise. */
 export async function api(path: string, init: RequestInit = {}): Promise<Json | null> {
   let res: Response
   try {

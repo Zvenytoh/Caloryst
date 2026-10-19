@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ApiError, errorMessage } from '../../shared/api'
 import { formatDay, formatKcal, toDecimal } from '../../shared/format'
+import { CloseIcon } from '../../shared/icons'
 import { fetchFoods, type Food } from '../foods/api'
 import { NewFoodForm } from '../foods/NewFoodForm'
-import { recordEntry } from './api'
+import { MEAL_LABEL, recordEntry, type Meal } from './api'
 
-type Props = { date: string; onClose: () => void; onAdded: () => void }
+type Props = { date: string; meal: Meal; onClose: () => void; onAdded: () => void }
 
 const QUICK_GRAMS = ['50', '100', '150', '200']
 
-export function AddEntryDialog({ date, onClose, onAdded }: Props) {
+export function AddEntryDialog({ date, meal, onClose, onAdded }: Props) {
   const dialog = useRef<HTMLDialogElement>(null)
   const search = useRef<HTMLInputElement>(null)
   const [foods, setFoods] = useState<Food[] | null>(null)
@@ -41,7 +42,7 @@ export function AddEntryDialog({ date, onClose, onAdded }: Props) {
     setBusy(true)
     setErrors({})
     try {
-      await recordEntry(selected.id, toDecimal(grams), date)
+      await recordEntry(selected.id, toDecimal(grams), date, meal)
       onAdded()
       onClose()
     } catch (err: unknown) {
@@ -61,11 +62,11 @@ export function AddEntryDialog({ date, onClose, onAdded }: Props) {
     <dialog ref={dialog} className="sheet" aria-labelledby="add-title" onClose={onClose}>
       <div className="sheet__head">
         <div>
-          <h2 id="add-title">Ajouter une portion</h2>
-          <p className="muted">{formatDay(date)}</p>
+          <h2 id="add-title">{MEAL_LABEL[meal]}</h2>
+          <p className="muted">Ajouter une portion · {formatDay(date)}</p>
         </div>
         <button type="button" className="icon-button" aria-label="Fermer" onClick={() => dialog.current?.close()}>
-          ×
+          <CloseIcon size={20} />
         </button>
       </div>
 
@@ -95,6 +96,9 @@ export function AddEntryDialog({ date, onClose, onAdded }: Props) {
                 <input type="radio" name="food" checked={selected?.id === food.id} onChange={() => setSelected(food)} />
                 <span className="food-option__name">{food.name}</span>
                 <span className="muted">{formatKcal(food.kcalPer100g)} kcal/100 g</span>
+                <span className="food-option__macros muted">
+                  G {formatKcal(food.carbsPer100g)} · P {formatKcal(food.proteinPer100g)} · L {formatKcal(food.fatPer100g)}
+                </span>
               </label>
             ))}
           </fieldset>

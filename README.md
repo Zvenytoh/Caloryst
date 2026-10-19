@@ -127,6 +127,11 @@ development and preview only; data is lost on restart and "Se connecter" signs i
 a demo account without a password. The service worker is registered only in
 production builds. No Rust checks or CI workflows exist yet.
 
+The web app uses the working name **Kalo** (logo masters and icons in
+`branding/kalo/`). Beyond the first milestone, the development API also covers
+macronutrients per food, meals, daily goals, water, and manual activities; the
+Rust API must implement the same contract before it replaces the mock.
+
 | Document | Read it for |
 | :--- | :--- |
 | [Architecture](docs/ARCHITECTURE.md) | Layers, dependencies, data boundaries, deployment direction |

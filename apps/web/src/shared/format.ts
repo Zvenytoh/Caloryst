@@ -3,6 +3,8 @@ const gramsFormat = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 3 })
 
 /** Formats a server decimal string for display only; never used for calculations. */
 export const formatKcal = (value: string) => kcalFormat.format(Number(value))
+const wholeFormat = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 })
+export const formatWhole = (value: string) => wholeFormat.format(Number(value))
 export const formatGrams = (value: string) => gramsFormat.format(Number(value))
 
 /** Today's calendar date in the browser's time zone, as YYYY-MM-DD. */

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchSession, signIn, signOut } from '../features/auth/session'
-import { DiaryPage } from '../features/diary/DiaryPage'
+import { Shell } from './Shell'
 import { ApiError, errorMessage } from '../shared/api'
 import { Logo } from '../shared/Logo'
 import { useUpdate } from './pwa'
@@ -12,7 +12,7 @@ type State =
   | { kind: 'signedOut' }
   | { kind: 'signedIn'; displayName: string }
 
-const channel = 'BroadcastChannel' in window ? new BroadcastChannel('caloryst-session') : null
+const channel = 'BroadcastChannel' in window ? new BroadcastChannel('kalo-session') : null
 
 async function loadSession(): Promise<State> {
   try {
@@ -58,22 +58,22 @@ export function App() {
     <>
       {update.available && (
         <div className="update" role="status">
-          Une nouvelle version de Caloryst est prête.
+          Une nouvelle version de Kalo est prête.
           <button type="button" className="button button--small" onClick={update.apply}>
             Mettre à jour
           </button>
         </div>
       )}
       {state.kind === 'signedIn' ? (
-        <DiaryPage displayName={state.displayName} onSignOut={logout} onUnauthenticated={signedOut} />
+        <Shell displayName={state.displayName} onSignOut={logout} onUnauthenticated={signedOut} />
       ) : (
         <main className="welcome">
           <Logo size={72} />
-          <h1>Caloryst</h1>
+          <h1>Kalo</h1>
           {state.kind === 'loading' && <p className="welcome__lead" aria-busy="true">Chargement…</p>}
           {state.kind === 'signedOut' && (
             <>
-              <p className="welcome__lead">Votre journal alimentaire, clair et précis. Notez une portion en quelques secondes, voyez votre journée d’un coup d’œil.</p>
+              <p className="welcome__lead">Calories, macros, eau et activités : votre journée, claire et précise, en un coup d’œil.</p>
               <button type="button" className="button button--large" onClick={signIn}>
                 Se connecter
               </button>
@@ -81,7 +81,7 @@ export function App() {
           )}
           {(state.kind === 'offline' || state.kind === 'error') && (
             <div role="alert" className="welcome__lead">
-              <p>{state.kind === 'offline' ? 'Caloryst a besoin d’une connexion pour afficher votre journal.' : state.message}</p>
+              <p>{state.kind === 'offline' ? 'Kalo a besoin d’une connexion pour afficher votre journal.' : state.message}</p>
               <button type="button" className="button" onClick={revalidate}>
                 Réessayer
               </button>

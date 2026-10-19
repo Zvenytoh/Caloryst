@@ -1,14 +1,14 @@
 {
   "id": "/",
-  "name": "Caloryst",
-  "short_name": "Caloryst",
+  "name": "Kalo",
+  "short_name": "Kalo",
   "description": "Votre journal alimentaire, clair et précis.",
   "lang": "fr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#F6F4EF",
-  "theme_color": "#006B50",
+  "theme_color": "#0E9F6E",
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
