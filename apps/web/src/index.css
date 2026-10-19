@@ -507,7 +507,7 @@ abbr[title] {
 }
 
 .stat__value {
-  font-size: 1.5rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
   font-weight: 800;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
@@ -520,7 +520,7 @@ abbr[title] {
 
 .gauge {
   position: relative;
-  inline-size: clamp(150px, 38vw, 200px);
+  inline-size: clamp(190px, 52vw, 290px);
 }
 
 .gauge svg {
@@ -542,23 +542,29 @@ abbr[title] {
 
 .gauge__value {
   stroke: var(--protein);
-  transition: stroke-dasharray 500ms var(--ease);
+  transition: stroke-dashoffset 700ms var(--ease);
+  animation: fill-arc 1100ms var(--ease) both;
 }
 
 .gauge__value--over {
   stroke: var(--fat);
 }
 
+/* Centred on the arc's circle: (80, 80) in a 160 x 140 view box. */
 .gauge__center {
   position: absolute;
-  inset: 0 0 12%;
+  inset-block-start: calc(80 / 140 * 100%);
+  inset-inline-start: 50%;
   display: grid;
-  place-content: center;
   justify-items: center;
+  gap: var(--space-1);
+  translate: -50% -50%;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .gauge__value-text {
-  font-size: clamp(2rem, 7vw, 2.75rem);
+  font-size: clamp(2.5rem, 11vw, 3.75rem);
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.04em;
@@ -610,7 +616,9 @@ abbr[title] {
   display: block;
   block-size: 100%;
   border-radius: 999px;
-  transition: inline-size 500ms var(--ease);
+  transform-origin: left;
+  transition: inline-size 700ms var(--ease);
+  animation: grow-x 1000ms 250ms var(--ease) both;
 }
 
 /* Meals */
@@ -666,7 +674,8 @@ abbr[title] {
 .ring__value {
   stroke: var(--protein);
   stroke-linecap: round;
-  transition: stroke-dasharray 500ms var(--ease);
+  transition: stroke-dashoffset 700ms var(--ease);
+  animation: fill-arc 1000ms 200ms var(--ease) both;
 }
 
 .meal__text {
@@ -1032,6 +1041,89 @@ abbr[title] {
   font-weight: 650;
 }
 
+/* Motion */
+@keyframes fill-arc {
+  from {
+    stroke-dashoffset: 100;
+  }
+}
+
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes pour {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+.day-head,
+.dashboard__main > *,
+.dashboard__side > *,
+.page-body > * {
+  animation: rise-in 500ms var(--ease) both;
+}
+
+.dashboard__main > :nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.dashboard__side > :nth-child(1) {
+  animation-delay: 140ms;
+}
+
+.dashboard__side > :nth-child(2) {
+  animation-delay: 200ms;
+}
+
+.entry,
+.activity {
+  animation: rise-in 350ms var(--ease) both;
+}
+
+.card {
+  transition:
+    border-color 200ms var(--ease),
+    box-shadow 200ms var(--ease);
+}
+
+.card:hover {
+  border-color: color-mix(in srgb, var(--brand) 25%, var(--border));
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.06);
+}
+
+.glass[aria-pressed='true'] .glass__fill {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: pour 450ms var(--ease) both;
+}
+
+.round-button {
+  transition:
+    transform 160ms var(--ease),
+    box-shadow 160ms var(--ease);
+}
+
+.round-button:hover {
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.tab {
+  transition:
+    background-color 200ms var(--ease),
+    color 200ms var(--ease);
+}
+
 /* Phones: bottom tab bar and bottom sheet */
 @media (max-width: 40rem) {
   .shell {
@@ -1093,11 +1185,44 @@ abbr[title] {
   }
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Reduced motion: no sliding or scaling; keep short fades and progress fills. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
+    transition-duration: 1ms !important;
+  }
+
+  .day-head,
+  .dashboard__main > *,
+  .dashboard__side > *,
+  .page-body > *,
+  .entry,
+  .activity,
+  .sheet[open] {
+    animation-name: fade-in !important;
+  }
+
+  .gauge__value,
+  .ring__value,
+  .bar__fill {
+    animation-duration: 500ms !important;
+  }
+
+  .glass__fill,
+  .skeleton {
     animation: none !important;
-    transition: none !important;
+  }
+
+  .button:active:not(:disabled),
+  .round-button:active,
+  .glass:active:not(:disabled) {
+    transform: none;
   }
 }

@@ -23,7 +23,9 @@ export function MealCard({ day, onAdd, onChanged }: Props) {
         <span className="meal__icon">
           <svg viewBox="0 0 48 48" aria-hidden="true">
             <circle cx="24" cy="24" r="21" className="ring__track" />
-            {progress > 0 && <circle cx="24" cy="24" r="21" className="ring__value" pathLength={100} strokeDasharray={`${progress * 100} 100`} />}
+            {progress > 0 && (
+              <circle cx="24" cy="24" r="21" className="ring__value" pathLength={100} strokeDasharray="100 100" strokeDashoffset={100 - progress * 100} />
+            )}
           </svg>
           {MEAL_ICON[day.meal]}
         </span>

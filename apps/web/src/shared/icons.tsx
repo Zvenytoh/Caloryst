@@ -42,7 +42,7 @@ export const PulseIcon = (p: P) => <Icon {...p}><path d="M3 12h4l2-5 4 10 2-5h6"
 export function GlassIcon({ full, size = 36 }: { full: boolean; size?: number }) {
   return (
     <svg width={size} height={size * 1.2} viewBox="0 0 30 36" aria-hidden="true" focusable="false">
-      <path d="M4 3h22l-3 30H7z" fill={full ? 'var(--water)' : 'none'} stroke="var(--water)" strokeWidth="2" strokeLinejoin="round" opacity={full ? 1 : 0.55} />
+      <path className={full ? 'glass__fill' : undefined} d="M4 3h22l-3 30H7z" fill={full ? 'var(--water)' : 'none'} stroke="var(--water)" strokeWidth="2" strokeLinejoin="round" opacity={full ? 1 : 0.55} />
       {full && <path d="M6.2 10h17.6" stroke="var(--surface)" strokeWidth="1.5" opacity="0.5" />}
     </svg>
   )
