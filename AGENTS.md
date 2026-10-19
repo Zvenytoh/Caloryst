@@ -2,8 +2,8 @@
 
 - Read README.md and the relevant parts of docs/ARCHITECTURE.md before editing.
 - Keep changes small, readable, and limited to the requested behavior. Apply Ponytail when available.
-- The stack is proposed until explicitly accepted. Do not scaffold the application or install dependencies just to document a choice.
-- Use idiomatic TypeScript for the proposed React frontend and idiomatic Rust for the proposed backend. Avoid unsafe Rust unless necessary; document its invariants.
+- The stack is accepted (see docs/ARCHITECTURE.md). Do not scaffold the application or install dependencies until implementation is requested.
+- Use idiomatic TypeScript for the React frontend and idiomatic Rust for the backend. Avoid unsafe Rust unless necessary; document its invariants.
 - Never commit secrets, database dumps, personal food diaries, or real user health data.
 - Validate input at API boundaries, use parameterized SQL, and preserve existing data during migrations.
 - Keep calorie units, portion units, rounding, and diary dates explicit. Do not silently rewrite historical nutrition values when foods change.

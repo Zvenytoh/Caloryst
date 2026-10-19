@@ -13,28 +13,35 @@ The aim is to make everyday logging clear, practical, and accessible.
 
 **Status: project initialization.** This repository currently contains the project
 documentation and logo. There is no runnable application yet. The technology
-choices below are proposals for discussion, not implemented capabilities.
+choices below are accepted but not implemented.
 
-## Proposed first milestone
+## First milestone
 
-- Add foods with their energy values and portion sizes.
+- Create an account and sign in.
+- Search foods from CIQUAL and Open Food Facts, or add your own.
 - Record food entries in a daily diary.
 - View daily calorie totals.
 
-These are candidate goals, not shipped features. Food data sources, accounts,
-hosting, and the exact first-release scope remain to be decided.
+These are planned goals, not shipped features. Caloryst is a mobile-friendly
+Progressive Web App. Hosting and authentication details remain to be decided.
 
-## Proposed technology stack
+## Technology stack
 
-| Layer | Proposal | Purpose |
+| Layer | Choice | Purpose |
 | --- | --- | --- |
-| Frontend | React + TypeScript, built with Vite | Responsive web interface |
+| Frontend | React + TypeScript, built with Vite | Responsive, installable PWA |
 | Backend | Rust + Axum | JSON HTTP API and nutrition calculations |
 | Database | PostgreSQL | Relational storage for foods and diary entries |
 | Database access | SQLx | Explicit SQL queries and versioned migrations |
 
 Start with one web frontend, one backend, and one database. See
-[architecture notes](docs/ARCHITECTURE.md) for trade-offs and open questions.
+[architecture notes](docs/ARCHITECTURE.md) for decisions and open questions.
+
+## Food data
+
+Caloryst will use the [CIQUAL](https://ciqual.anses.fr/) table from ANSES
+(Licence Ouverte / Etalab 2.0) and [Open Food Facts](https://fr.openfoodfacts.org/data)
+(Open Database License). See [food data licensing](docs/ARCHITECTURE.md#food-data-licensing).
 
 ## Getting started
 

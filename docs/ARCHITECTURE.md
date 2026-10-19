@@ -2,14 +2,35 @@
 
 ## Status
 
-Documentation only. React is the requested frontend direction, PostgreSQL is the
-requested database direction, and Rust is under consideration for the backend.
-TypeScript, Vite, Axum, and SQLx are recommendations, not finalized decisions.
+Documentation only; no application code yet. The stack and first-release scope
+below were accepted on 2026-10-19.
 
-## Recommended starting point
+## Accepted decisions
+
+- **Platform:** a mobile-friendly web app delivered as a Progressive Web App
+  (installable, responsive). No native client for the first release.
+- **Users:** multi-user with accounts from the start. Every food diary row
+  belongs to a user. Users must be able to export and delete their data.
+- **Food data:** imported reference catalogs from [CIQUAL](https://ciqual.anses.fr/)
+  (ANSES, generic foods, Licence Ouverte / Etalab 2.0) and
+  [Open Food Facts](https://fr.openfoodfacts.org/data) (branded products and
+  barcodes, ODbL), plus foods created manually by users.
+- **Stack:** React + TypeScript + Vite frontend, Rust + Axum backend, SQLx,
+  PostgreSQL.
+
+## Food data licensing
+
+- Keep the source (`ciqual`, `openfoodfacts`, `user`) and the source identifier
+  on every catalog food, and keep imported data separate from user-created foods.
+- Display attribution for both sources in the app and the README.
+- Open Food Facts data is under ODbL: any derived database made public must be
+  shared under ODbL. User diaries are not part of the shared catalog.
+- Re-imports update catalog foods but never rewrite diary snapshots.
+
+## Architecture
 
 ```text
-React + TypeScript web interface
+React + TypeScript PWA
               |
           JSON / HTTP
               |
@@ -24,17 +45,13 @@ Use a single backend deployment and a single database initially. No microservice
 message broker, or cache is justified by the current requirements.
 
 React fits the interactive diary and food-entry forms. TypeScript makes component
-and API data contracts more explicit. Vite is a suitable build tool for a client
-application backed by a separate API.
+and API data contracts explicit. Vite builds the client and its PWA manifest and
+service worker; the API stays a separate service.
 
-Rust is a reasonable choice if learning or maintaining Rust is part of the goal.
-It offers strong compile-time guarantees but adds initial development work around
-async code, error handling, and integration. A TypeScript backend is an alternative
-if shipping quickly with one language matters more. Calorie counting alone does
-not require Rust's performance characteristics.
-
-PostgreSQL suits related foods, portions, and diary entries. SQLx would keep SQL
-and migrations explicit without adding a separate ORM model layer.
+Rust + Axum gives strong compile-time guarantees at the cost of some initial work
+around async code and error handling. PostgreSQL suits related users, foods,
+portions, and diary entries. SQLx keeps SQL and migrations explicit without an
+ORM layer. Catalog imports run as a separate command, not inside request handlers.
 
 ## Nutrition data principles for implementation
 
@@ -49,10 +66,12 @@ These are design recommendations; no schema or calculation engine exists yet.
 
 ## Open decisions
 
-- Web-only first release, mobile-friendly web, or a later native client?
-- Manual food entry, an external food database, or both? Review data licensing before importing a catalog.
-- Personal use, self-hosted multi-user use, or a hosted service?
-- Accounts, data export/deletion, and the precise first-release scope.
+- Authentication method (server sessions with secure cookies vs. tokens, password
+  hashing, email verification and password reset).
+- Hosting and deployment target.
+- Offline behaviour of the PWA: read-only cache or offline entry with sync.
+- Interface languages (French first, English, or both).
+- Which Open Food Facts subset to import (full dump vs. country or completeness filter).
 
 ## Documentation references
 
