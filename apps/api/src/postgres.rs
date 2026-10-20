@@ -1,7 +1,8 @@
 //! PostgreSQL adapter for the application ports. Every query is scoped to its owner.
 
 use caloryst_application::{
-    Activity, DiaryStore, Entry, Food, FoodStore, GoalsStore, ProfileStore, StoreError, StoreResult,
+    Activity, CatalogStore, DiaryStore, Entry, Food, FoodSource, FoodStore, GoalsStore,
+    ImportedFood, ProfileStore, StoreError, StoreResult, search_key,
 };
 use caloryst_domain::{
     Activity as ActivityLevel, Details, FoodName, Goals, Grams, Meal, Nutrition, Objective,
@@ -65,11 +66,32 @@ fn nutrition((kcal, protein, carbs, fat, details): NutritionRow) -> StoreResult<
     Nutrition::new(kcal, protein, carbs, fat, details_from(&details)?).map_err(corrupt("nutrition"))
 }
 
-type FoodRow = (Uuid, String, Decimal, Decimal, Decimal, Decimal, String);
+type FoodRow = (
+    Uuid,
+    String,
+    Option<String>,
+    String,
+    Decimal,
+    Decimal,
+    Decimal,
+    Decimal,
+    String,
+);
 
-fn food((id, name, kcal, protein, carbs, fat, details): FoodRow) -> StoreResult<Food> {
+fn source(value: &str) -> StoreResult<FoodSource> {
+    match value {
+        "user" => Ok(FoodSource::User),
+        "ciqual" => Ok(FoodSource::Ciqual),
+        "openfoodfacts" => Ok(FoodSource::OpenFoodFacts),
+        _ => Err(corrupt("food source")(())),
+    }
+}
+
+fn food((id, src, brand, name, kcal, protein, carbs, fat, details): FoodRow) -> StoreResult<Food> {
     Ok(Food {
         id,
+        source: source(&src)?,
+        brand,
         name: FoodName::new(&name).map_err(corrupt("food"))?,
         nutrition: nutrition((kcal, protein, carbs, fat, details))?,
     })
@@ -78,7 +100,7 @@ fn food((id, name, kcal, protein, carbs, fat, details): FoodRow) -> StoreResult<
 impl FoodStore for PgStore {
     async fn list_foods(&self, owner: &str) -> StoreResult<Vec<Food>> {
         let rows: Vec<FoodRow> = sqlx::query_as(
-            "SELECT id, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, details::text
+            "SELECT id, 'user', NULL::text, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, details::text
              FROM foods WHERE owner_id = $1 ORDER BY lower(name) LIMIT 1000",
         )
         .bind(owner)
@@ -108,10 +130,15 @@ impl FoodStore for PgStore {
         Ok(())
     }
 
+    /// The owner's own food, or a shared catalog food.
     async fn food(&self, owner: &str, id: Uuid) -> StoreResult<Food> {
         let row: Option<FoodRow> = sqlx::query_as(
-            "SELECT id, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, details::text
-             FROM foods WHERE owner_id = $1 AND id = $2",
+            "SELECT id, 'user', NULL::text, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, details::text
+             FROM foods WHERE owner_id = $1 AND id = $2
+             UNION ALL
+             SELECT id, source, brand, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, details::text
+             FROM catalog_foods WHERE id = $2
+             LIMIT 1",
         )
         .bind(owner)
         .bind(id)
@@ -119,6 +146,99 @@ impl FoodStore for PgStore {
         .await
         .map_err(unavailable)?;
         food(row.ok_or(StoreError::NotFound)?)
+    }
+}
+
+impl CatalogStore for PgStore {
+    async fn search_catalog(&self, terms: &[String], limit: i64) -> StoreResult<Vec<Food>> {
+        // Terms are alphanumeric only (search_terms), so they cannot carry LIKE wildcards.
+        let patterns: Vec<String> = terms.iter().map(|t| format!("%{t}%")).collect();
+        let prefix = terms.first().map(|t| format!("{t}%")).unwrap_or_default();
+        let rows: Vec<FoodRow> = sqlx::query_as(
+            "SELECT id, source, brand, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, details::text
+             FROM catalog_foods WHERE search_name LIKE ALL($1)
+             ORDER BY (search_name LIKE $2) DESC, (source = 'ciqual') DESC, char_length(name), name
+             LIMIT $3",
+        )
+        .bind(&patterns)
+        .bind(prefix)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(unavailable)?;
+        rows.into_iter().map(food).collect()
+    }
+
+    async fn upsert_catalog(&self, foods: &[ImportedFood]) -> StoreResult<Vec<Food>> {
+        let mut tx = self.pool.begin().await.map_err(unavailable)?;
+        let mut stored = Vec::with_capacity(foods.len());
+        for f in foods {
+            let n = &f.nutrition;
+            let row: FoodRow = sqlx::query_as(
+                "INSERT INTO catalog_foods
+                   (id, source, source_id, name, brand, search_name, kcal_per_100g, protein_per_100g, carbs_per_100g,
+                    fat_per_100g, details)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+                 ON CONFLICT (source, source_id) DO UPDATE SET
+                   name = EXCLUDED.name, brand = EXCLUDED.brand, search_name = EXCLUDED.search_name,
+                   kcal_per_100g = EXCLUDED.kcal_per_100g, protein_per_100g = EXCLUDED.protein_per_100g,
+                   carbs_per_100g = EXCLUDED.carbs_per_100g, fat_per_100g = EXCLUDED.fat_per_100g,
+                   details = EXCLUDED.details, updated_at = now()
+                 RETURNING id, source, brand, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g,
+                   details::text",
+            )
+            .bind(Uuid::new_v4())
+            .bind(f.source.as_str())
+            .bind(&f.source_id)
+            .bind(f.name.as_str())
+            .bind(&f.brand)
+            .bind(search_key(&format!("{} {}", f.name.as_str(), f.brand.as_deref().unwrap_or_default())))
+            .bind(n.kcal())
+            .bind(n.protein())
+            .bind(n.carbs())
+            .bind(n.fat())
+            .bind(details_json(n.details()))
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(unavailable)?;
+            stored.push(food(row)?);
+        }
+        tx.commit().await.map_err(unavailable)?;
+        Ok(stored)
+    }
+
+    async fn catalog_food(&self, source: FoodSource, source_id: &str) -> StoreResult<Option<Food>> {
+        let row: Option<FoodRow> = sqlx::query_as(
+            "SELECT id, source, brand, name, kcal_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, details::text
+             FROM catalog_foods WHERE source = $1 AND source_id = $2",
+        )
+        .bind(source.as_str())
+        .bind(source_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(unavailable)?;
+        row.map(food).transpose()
+    }
+}
+
+impl PgStore {
+    /// Whether a bundled dataset version is already loaded.
+    pub async fn imported(&self, version: &str) -> Result<bool, sqlx::Error> {
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT version FROM catalog_imports WHERE version = $1")
+                .bind(version)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row.is_some())
+    }
+
+    pub async fn mark_imported(&self, version: &str, rows: usize) -> Result<(), sqlx::Error> {
+        sqlx::query("INSERT INTO catalog_imports (version, row_count) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+            .bind(version)
+            .bind(i32::try_from(rows).unwrap_or(i32::MAX))
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 }
 

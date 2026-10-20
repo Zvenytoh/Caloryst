@@ -2,6 +2,7 @@
 
 use crate::{
     identity::{DEV_COOKIE, Identity, Session},
+    openfoodfacts::OpenFoodFacts,
     postgres::PgStore,
 };
 use axum::{
@@ -29,6 +30,7 @@ pub struct AppState {
     pub store: PgStore,
     pub identity: Identity,
     pub public_origin: String,
+    pub open_food_facts: OpenFoodFacts,
 }
 
 // ---------- errors ----------
@@ -39,6 +41,7 @@ pub enum ApiError {
     Forbidden,
     Invalid(Invalid),
     NotFound,
+    Busy,
     Unavailable,
 }
 
@@ -47,6 +50,7 @@ impl From<Error> for ApiError {
         match err {
             Error::Invalid(i) => ApiError::Invalid(i),
             Error::NotFound => ApiError::NotFound,
+            Error::Busy => ApiError::Busy,
             Error::Unavailable => ApiError::Unavailable,
         }
     }
@@ -81,6 +85,11 @@ impl IntoResponse for ApiError {
                 "Vérifiez les champs.",
             ),
             ApiError::NotFound => (StatusCode::NOT_FOUND, "not_found", "Ressource introuvable."),
+            ApiError::Busy => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "busy",
+                "Trop de recherches Open Food Facts : réessayez dans une minute.",
+            ),
             ApiError::Unavailable => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "unavailable",
@@ -204,6 +213,8 @@ fn food_json(food: &app::Food) -> Value {
     json!({
         "id": food.id,
         "name": food.name.as_str(),
+        "source": food.source.as_str(),
+        "brand": food.brand,
         "kcalPer100g": dec(n.kcal()),
         "proteinPer100g": dec(n.protein()),
         "carbsPer100g": dec(n.carbs()),
@@ -310,11 +321,43 @@ async fn dev_login(State(state): State<AppState>) -> ApiResult<Response> {
     Ok(response)
 }
 
-async fn list_foods(State(s): State<AppState>, a: Authed) -> ApiResult {
-    let foods = app::list_foods(&s.store, &a.actor).await?;
+#[derive(Deserialize)]
+struct SearchQuery {
+    #[serde(default)]
+    q: String,
+}
+
+/// The user's foods; with `q`, also matching catalog foods (CIQUAL, cached Open Food Facts).
+async fn list_foods(
+    State(s): State<AppState>,
+    a: Authed,
+    Query(q): Query<SearchQuery>,
+) -> ApiResult {
+    let foods = app::search_foods(&s.store, &a.actor, &q.q).await?;
     Ok(Json(
         json!({ "foods": foods.iter().map(food_json).collect::<Vec<_>>() }),
     ))
+}
+
+async fn search_open_food_facts(
+    State(s): State<AppState>,
+    _: Authed,
+    Query(q): Query<SearchQuery>,
+) -> ApiResult {
+    let foods = app::search_open_food_facts(&s.store, &s.open_food_facts, &q.q).await?;
+    Ok(Json(
+        json!({ "foods": foods.iter().map(food_json).collect::<Vec<_>>() }),
+    ))
+}
+
+async fn food_by_barcode(
+    State(s): State<AppState>,
+    _: Authed,
+    Path(code): Path<String>,
+) -> ApiResult {
+    Ok(Json(food_json(
+        &app::food_by_barcode(&s.store, &s.open_food_facts, &code).await?,
+    )))
 }
 
 #[derive(Deserialize)]
@@ -624,6 +667,8 @@ pub fn api(state: AppState) -> Router {
         .route("/auth/login", get(dev_login))
         .route("/auth/logout", post(logout))
         .route("/foods", get(list_foods).post(create_food))
+        .route("/foods/openfoodfacts", get(search_open_food_facts))
+        .route("/foods/barcode/{code}", get(food_by_barcode))
         .route("/goals", get(get_goals).put(put_goals))
         .route("/diary", get(diary))
         .route("/diary/entries", post(record_entry))

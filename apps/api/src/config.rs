@@ -14,6 +14,8 @@ pub struct Config {
     pub listen: SocketAddr,
     /// Built frontend to serve; `None` runs the API alone.
     pub static_dir: Option<PathBuf>,
+    /// Identifies Kalo to Open Food Facts: "AppName/Version (contact)".
+    pub off_user_agent: String,
 }
 
 fn var(name: &str) -> Option<String> {
@@ -60,6 +62,8 @@ impl Config {
             auth,
             listen: SocketAddr::from(([0, 0, 0, 0], port)),
             static_dir: var("STATIC_DIR").map(PathBuf::from),
+            off_user_agent: var("OFF_USER_AGENT")
+                .unwrap_or_else(|| "Kalo/0.1 (https://github.com/Zvenytoh/Caloryst)".into()),
         })
     }
 }

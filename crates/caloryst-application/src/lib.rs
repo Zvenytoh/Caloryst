@@ -32,6 +32,8 @@ pub enum Error {
     Invalid(Invalid),
     /// Missing, or owned by someone else: callers must not distinguish the two.
     NotFound,
+    /// An external service's rate limit is reached; retry later.
+    Busy,
     Unavailable,
 }
 
@@ -59,11 +61,75 @@ pub enum StoreError {
 
 pub type StoreResult<T> = Result<T, StoreError>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoodSource {
+    /// Created by the user; private to them.
+    User,
+    /// ANSES CIQUAL table (Etalab 2.0); shared and read-only.
+    Ciqual,
+    /// Open Food Facts product (ODbL); shared and read-only.
+    OpenFoodFacts,
+}
+
+impl FoodSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FoodSource::User => "user",
+            FoodSource::Ciqual => "ciqual",
+            FoodSource::OpenFoodFacts => "openfoodfacts",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Food {
     pub id: Uuid,
     pub name: FoodName,
     pub nutrition: Nutrition,
+    pub source: FoodSource,
+    pub brand: Option<String>,
+}
+
+/// A catalog food from an external source, identified by its source id (CIQUAL code, barcode).
+#[derive(Debug, Clone)]
+pub struct ImportedFood {
+    pub source: FoodSource,
+    pub source_id: String,
+    pub name: FoodName,
+    pub brand: Option<String>,
+    pub nutrition: Nutrition,
+}
+
+/// Lowercase, accent-free words used to match food names ("Pâtes, cuites" -> "pates cuites").
+pub fn search_key(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.to_lowercase().chars() {
+        match c {
+            'à' | 'â' | 'ä' | 'á' | 'ã' => out.push('a'),
+            'é' | 'è' | 'ê' | 'ë' => out.push('e'),
+            'î' | 'ï' | 'í' | 'ì' => out.push('i'),
+            'ô' | 'ö' | 'ó' | 'ò' | 'õ' => out.push('o'),
+            'ù' | 'û' | 'ü' | 'ú' => out.push('u'),
+            'ç' => out.push('c'),
+            'ñ' => out.push('n'),
+            'ÿ' => out.push('y'),
+            'œ' => out.push_str("oe"),
+            'æ' => out.push_str("ae"),
+            c if c.is_alphanumeric() => out.push(c),
+            _ => out.push(' '),
+        }
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Up to five search words of at least two characters.
+pub fn search_terms(query: &str) -> Vec<String> {
+    search_key(query)
+        .split(' ')
+        .filter(|w| w.chars().count() >= 2)
+        .take(5)
+        .map(str::to_owned)
+        .collect()
 }
 
 #[derive(Debug, Clone)]
@@ -148,6 +214,52 @@ pub trait DiaryStore: Send + Sync {
     ) -> impl Future<Output = StoreResult<Vec<(Date, Activity)>>> + Send;
 }
 
+pub trait CatalogStore: Send + Sync {
+    /// Catalog foods whose name contains every term.
+    fn search_catalog(
+        &self,
+        terms: &[String],
+        limit: i64,
+    ) -> impl Future<Output = StoreResult<Vec<Food>>> + Send;
+    /// Inserts or refreshes catalog foods; returns them stored, in the same order.
+    fn upsert_catalog(
+        &self,
+        foods: &[ImportedFood],
+    ) -> impl Future<Output = StoreResult<Vec<Food>>> + Send;
+    fn catalog_food(
+        &self,
+        source: FoodSource,
+        source_id: &str,
+    ) -> impl Future<Output = StoreResult<Option<Food>>> + Send;
+}
+
+#[derive(Debug)]
+pub enum LookupError {
+    NotFound,
+    RateLimited,
+    Unavailable,
+}
+
+impl From<LookupError> for Error {
+    fn from(value: LookupError) -> Self {
+        match value {
+            LookupError::NotFound => Error::NotFound,
+            LookupError::RateLimited => Error::Busy,
+            LookupError::Unavailable => Error::Unavailable,
+        }
+    }
+}
+
+/// An external product database (Open Food Facts).
+pub trait ProductLookup: Send + Sync {
+    fn search(
+        &self,
+        query: &str,
+    ) -> impl Future<Output = Result<Vec<ImportedFood>, LookupError>> + Send;
+    fn barcode(&self, code: &str)
+    -> impl Future<Output = Result<ImportedFood, LookupError>> + Send;
+}
+
 pub trait ProfileStore: Send + Sync {
     fn profile(&self, owner: &str) -> impl Future<Output = StoreResult<Option<Profile>>> + Send;
     fn save_profile(
@@ -187,6 +299,8 @@ pub async fn create_food(
 ) -> Result<Food, Error> {
     let food = Food {
         id: Uuid::new_v4(),
+        source: FoodSource::User,
+        brand: None,
         name: FoodName::new(input.name)?,
         nutrition: Nutrition::parse(
             input.kcal,
@@ -431,4 +545,66 @@ pub async fn analysis<S: DiaryStore + GoalsStore + ProfileStore>(
         day_entries,
         analysis,
     })
+}
+
+/// The user's foods matching the query, then catalog foods (CIQUAL, cached Open Food Facts).
+pub async fn search_foods<S: FoodStore + CatalogStore>(
+    store: &S,
+    actor: &Actor,
+    query: &str,
+) -> Result<Vec<Food>, Error> {
+    let terms = search_terms(query);
+    let own = store.list_foods(actor.user_id()).await?;
+    if terms.is_empty() {
+        return Ok(own);
+    }
+    let mut foods: Vec<Food> = own
+        .into_iter()
+        .filter(|f| {
+            let key = search_key(f.name.as_str());
+            terms.iter().all(|t| key.contains(t.as_str()))
+        })
+        .collect();
+    foods.extend(store.search_catalog(&terms, 40).await?);
+    Ok(foods)
+}
+
+/// Searches Open Food Facts and caches the results in the shared catalog.
+pub async fn search_open_food_facts(
+    store: &impl CatalogStore,
+    lookup: &impl ProductLookup,
+    query: &str,
+) -> Result<Vec<Food>, Error> {
+    let query = query.trim();
+    if !(2..=100).contains(&query.chars().count()) {
+        return Err(Error::Invalid(Invalid {
+            field: "q",
+            message: "Entre 2 et 100 caractères.",
+        }));
+    }
+    let found = lookup.search(query).await?;
+    Ok(store.upsert_catalog(&found).await?)
+}
+
+/// A product by barcode: from the catalog cache, otherwise from Open Food Facts.
+pub async fn food_by_barcode(
+    store: &impl CatalogStore,
+    lookup: &impl ProductLookup,
+    code: &str,
+) -> Result<Food, Error> {
+    if !(6..=14).contains(&code.len()) || !code.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(Error::Invalid(Invalid {
+            field: "barcode",
+            message: "Code-barres invalide.",
+        }));
+    }
+    if let Some(food) = store.catalog_food(FoodSource::OpenFoodFacts, code).await? {
+        return Ok(food);
+    }
+    let product = lookup.barcode(code).await?;
+    store
+        .upsert_catalog(std::slice::from_ref(&product))
+        .await?
+        .pop()
+        .ok_or(Error::Unavailable)
 }

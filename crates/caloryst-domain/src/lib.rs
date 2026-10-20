@@ -209,6 +209,27 @@ impl Nutrition {
         )
     }
 
+    /// For imported catalog data: macros rounded to 3 decimals must be valid (otherwise
+    /// `None`); detailed values that are out of range or inconsistent are dropped.
+    pub fn from_imported(
+        kcal: Decimal,
+        protein: Decimal,
+        carbs: Decimal,
+        fat: Decimal,
+        details: Details,
+    ) -> Option<Self> {
+        let [kcal, protein, carbs, fat] =
+            [kcal, protein, carbs, fat].map(|v| v.round_dp(3).normalize());
+        let mut details = details;
+        if details.get(Nutrient::Sugars).is_some_and(|s| s > carbs) {
+            details = details.without(Nutrient::Sugars);
+        }
+        if details.get(Nutrient::SaturatedFat).is_some_and(|s| s > fat) {
+            details = details.without(Nutrient::SaturatedFat);
+        }
+        Self::new(kcal, protein, carbs, fat, details).ok()
+    }
+
     pub fn details(&self) -> &Details {
         &self.details
     }

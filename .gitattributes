@@ -2,3 +2,4 @@
 *.md text eol=lf
 *.png binary
 *.sql text eol=lf
+*.tsv text eol=lf

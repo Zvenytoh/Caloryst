@@ -1,6 +1,8 @@
+mod catalog;
 mod config;
 mod http;
 mod identity;
+mod openfoodfacts;
 mod postgres;
 
 use axum::{
@@ -54,10 +56,13 @@ async fn run() -> Result<(), String> {
             "KALO_AUTH=dev: anyone can sign in as the shared dev user. Never use this in production."
         );
     }
+    let store = postgres::PgStore::new(pool.clone());
+    catalog::import_ciqual(&store).await?;
     let state = http::AppState {
-        store: postgres::PgStore::new(pool.clone()),
+        store,
         identity,
         public_origin: config.public_origin.clone(),
+        open_food_facts: openfoodfacts::OpenFoodFacts::new(&config.off_user_agent)?,
     };
 
     let api = http::api(state)

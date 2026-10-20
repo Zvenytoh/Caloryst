@@ -19,6 +19,9 @@ COPY apps/api apps/api
 RUN cargo build --release --locked -p caloryst-api
 
 FROM debian:bookworm-slim
+# TLS for Open Food Facts requests (native-tls uses OpenSSL on Linux).
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 \
+    && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --uid 10001 --no-create-home kalo
 WORKDIR /app
 COPY --from=api /src/target/release/caloryst-api /app/caloryst-api

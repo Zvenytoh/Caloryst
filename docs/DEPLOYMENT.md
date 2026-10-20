@@ -25,6 +25,7 @@ is then sent to the Kalo API, and no CORS configuration is needed.
 | `RUN_MIGRATIONS` | no | `true` (default) | Applies `apps/api/migrations` at startup. |
 | `DATABASE_MAX_CONNECTIONS` | no | `10` (default) | Pool size. |
 | `PORT` | no | `8080` (default) | Listening port. |
+| `OFF_USER_AGENT` | recommended | `Kalo/0.1 (contact@example.com)` | Identifies the app to Open Food Facts ("AppName/Version (contact)"). Defaults to the repository URL. |
 | `RUST_LOG` | no | `info` (default) | Log level. Logs never include diary contents or cookies. |
 | `STATIC_DIR` | set by image | `/app/web` | Built PWA to serve. |
 
@@ -61,6 +62,18 @@ The Kalo API reads Better Auth's default PostgreSQL tables:
 
 Sign-out from the app calls `POST /api/v1/auth/logout`, which deletes the session row
 and clears the cookie.
+
+## Food catalogs
+
+- **CIQUAL 2025** (ANSES, Licence Ouverte Etalab 2.0, doi:10.57745/RDMHWY) is bundled as
+  `apps/api/data/ciqual-2025.tsv` and loaded into `catalog_foods` at the first start of each
+  version (about one second). Regenerate it with `apps/api/data/convert_ciqual.py`.
+- **Open Food Facts** (ODbL) is queried live through the API: search and barcode lookups are
+  limited to 8 and 12 requests per minute per server (OFF allows 10 and 15 per IP), and every
+  product returned is cached in `catalog_foods`. Over the limit, users get a "retry in a minute"
+  message. The server needs outbound HTTPS to `search.openfoodfacts.org` and `world.openfoodfacts.org`.
+- The app shows both attributions next to search results. A public copy of the cached Open
+  Food Facts data must be shared under ODbL.
 
 ## Known limits
 

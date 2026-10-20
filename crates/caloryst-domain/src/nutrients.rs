@@ -162,6 +162,22 @@ impl Details {
         Ok(Self(map))
     }
 
+    /// For imported catalog data: rounds to 3 decimals and drops out-of-range values.
+    pub fn lenient(values: impl IntoIterator<Item = (Nutrient, Decimal)>) -> Self {
+        Self(
+            values
+                .into_iter()
+                .map(|(n, v)| (n, v.round_dp(3).normalize()))
+                .filter(|&(n, v)| !v.is_sign_negative() && v <= n.max_per_100g())
+                .collect(),
+        )
+    }
+
+    pub(crate) fn without(mut self, nutrient: Nutrient) -> Self {
+        self.0.remove(&nutrient);
+        self
+    }
+
     pub fn get(&self, nutrient: Nutrient) -> Option<Decimal> {
         self.0.get(&nutrient).copied()
     }

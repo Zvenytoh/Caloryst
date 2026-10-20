@@ -102,7 +102,7 @@ provider will be selected before scaffolding. The
 - [x] Build the food-to-diary interface, daily summary, and entry editing/deletion.
 - [x] Scaffold the Rust workspace and deliver the API and PostgreSQL schema.
 - [ ] Set up Better Auth sign-in on the same domain.
-- [ ] Import the CIQUAL and Open Food Facts catalogs with source attribution.
+- [x] Import CIQUAL 2025 (ANSES, Licence Ouverte Etalab 2.0) and search Open Food Facts (ODbL), with source attribution.
 - [ ] Complete release checks, deployment instructions, and data lifecycle controls.
 
 ## Development
