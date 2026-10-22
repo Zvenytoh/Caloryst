@@ -120,11 +120,12 @@ npm install
 npm run dev        # http://localhost:5173, /api proxied to the Rust API
 npm run typecheck  # strict TypeScript
 npm run lint       # oxlint, including React Hooks rules
+npm test           # Vitest unit and component tests (jsdom)
 npm run build      # production bundle and service worker in dist/
 npm run preview    # serve the production build, /api proxied to the Rust API
 ```
 
-The dev server proxies `/api` to `http://localhost:8080` (override with `KALO_API_URL`).
+The dev server proxies `/api` to `http://127.0.0.1:8080` (override with `KALO_API_URL`).
 The service worker is registered only in production builds.
 
 The API needs Rust 1.99.1 (pinned in `rust-toolchain.toml`) and PostgreSQL 17:
@@ -135,6 +136,7 @@ cargo run -p caloryst-api                # http://localhost:8080, applies migrat
 npm --prefix apps/web run dev            # http://localhost:5173
 cargo fmt --all --check
 cargo clippy --all-targets --locked -- -D warnings
+cargo test --workspace --locked          # domain, application and adapter unit tests
 ```
 
 The API reads environment variables only: load `apps/api/.env` into your shell
