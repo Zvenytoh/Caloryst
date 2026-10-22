@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ApiError, errorMessage } from '../../shared/api'
 import { formatKcal } from '../../shared/format'
-import { foodByBarcode, searchFoods, searchOpenFoodFacts, type Food, type FoodSource } from './api'
-
-const SOURCE_LABEL: Record<FoodSource, string> = { user: 'Mes aliments', ciqual: 'CIQUAL', openfoodfacts: 'Open Food Facts' }
+import { SOURCE_LABEL, foodByBarcode, searchOpenFoodFacts, type Food } from './api'
+import { useFoodSearch } from './useFoodSearch'
 
 type Props = {
   query: string
@@ -14,46 +13,30 @@ type Props = {
 
 /** Searches the user's foods, CIQUAL and Open Food Facts; the caller owns the selection. */
 export function FoodPicker({ query, onQueryChange, selected, onSelect }: Props) {
-  const [results, setResults] = useState<Food[] | null>(null)
-  const [extra, setExtra] = useState<Food[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const { results, error: searchError } = useFoodSearch(query)
+  // Open Food Facts and barcode results belong to the query they were fetched for.
+  const [extra, setExtra] = useState<{ query: string; foods: Food[] }>({ query: '', foods: [] })
+  const [offError, setOffError] = useState<string | null>(null)
   const [offBusy, setOffBusy] = useState(false)
   const [barcode, setBarcode] = useState('')
 
-  useEffect(() => {
-    const controller = new AbortController()
-    // Debounced: one request after typing pauses; aborted if the query changes again.
-    const timer = setTimeout(() => {
-      searchFoods(query, controller.signal)
-        .then((foods) => {
-          setResults(foods)
-          setExtra([])
-          setError(null)
-        })
-        .catch((err: unknown) => !controller.signal.aborted && setError(errorMessage(err)))
-    }, 250)
-    return () => {
-      clearTimeout(timer)
-      controller.abort()
-    }
-  }, [query])
-
   const fetchExtra = async (load: () => Promise<Food[]>) => {
     setOffBusy(true)
-    setError(null)
+    setOffError(null)
     try {
       const found = await load()
-      setExtra(found)
+      setExtra({ query, foods: found })
       if (found.length === 1 && found[0]) onSelect(found[0])
     } catch (err: unknown) {
-      setError(err instanceof ApiError && err.status === 404 ? 'Produit introuvable sur Open Food Facts.' : errorMessage(err))
+      setOffError(err instanceof ApiError && err.status === 404 ? 'Produit introuvable sur Open Food Facts.' : errorMessage(err))
     } finally {
       setOffBusy(false)
     }
   }
 
+  const error = offError ?? searchError
   const known = new Set(results?.map((f) => f.id))
-  const shown = [...(results ?? []), ...extra.filter((f) => !known.has(f.id))]
+  const shown = [...(results ?? []), ...(extra.query === query ? extra.foods : []).filter((f) => !known.has(f.id))]
   const canSearchOff = query.trim().length >= 2
 
   return (

@@ -18,6 +18,8 @@ export type NewFood = Omit<Food, 'id' | 'source' | 'brand'>
 
 const SOURCES: readonly FoodSource[] = ['user', 'ciqual', 'openfoodfacts']
 
+export const SOURCE_LABEL: Record<FoodSource, string> = { user: 'Mes aliments', ciqual: 'CIQUAL', openfoodfacts: 'Open Food Facts' }
+
 function details(value: unknown): Record<string, string> {
   if (!isObject(value)) return {}
   return Object.fromEntries(Object.entries(value).filter((e): e is [string, string] => typeof e[1] === 'string'))

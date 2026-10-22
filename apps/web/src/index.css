@@ -1512,6 +1512,72 @@ fieldset.segmented legend {
   overflow-wrap: anywhere;
 }
 
+/* Food facts */
+.food-table__name {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  text-align: start;
+  cursor: pointer;
+}
+
+.food-table__name:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+
+.food-table th .source {
+  margin-block-start: 2px;
+}
+
+.facts {
+  display: grid;
+  margin: 0;
+  border-block-start: 2px solid var(--text);
+}
+
+.facts__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-block-end: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.facts__row dt {
+  font-weight: 650;
+}
+
+.facts__row dd {
+  margin: 0;
+  text-align: end;
+}
+
+.facts__row--energy {
+  font-size: 1.125rem;
+  font-weight: 800;
+}
+
+.facts__row--sub dt {
+  padding-inline-start: var(--space-4);
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.facts__heading {
+  margin: var(--space-2) 0 var(--space-1);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 /* Toasts */
 .toaster {
   position: fixed;
