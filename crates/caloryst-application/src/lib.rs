@@ -608,3 +608,24 @@ pub async fn food_by_barcode(
         .pop()
         .ok_or(Error::Unavailable)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_key_folds_accents_and_punctuation() {
+        assert_eq!(
+            search_key("Pâtes sèches, cuites (Œufs)"),
+            "pates seches cuites oeufs"
+        );
+        assert_eq!(search_key("  Crème   brûlée "), "creme brulee");
+    }
+
+    #[test]
+    fn search_terms_drop_short_words_and_cap_at_five() {
+        assert_eq!(search_terms("a riz cuit"), vec!["riz", "cuit"]);
+        assert_eq!(search_terms("un deux trois quatre cinq six").len(), 5);
+        assert!(search_terms("%_").is_empty());
+    }
+}

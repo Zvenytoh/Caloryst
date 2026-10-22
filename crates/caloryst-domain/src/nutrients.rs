@@ -213,3 +213,62 @@ pub fn nutrient_totals(portions: &[&Portion]) -> Vec<NutrientTotal> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Grams, Nutrition};
+    use std::str::FromStr;
+
+    fn d(s: &str) -> Decimal {
+        Decimal::from_str(s).unwrap()
+    }
+
+    #[test]
+    fn lenient_drops_out_of_range_and_rounds() {
+        let details = Details::lenient([
+            (Nutrient::Fiber, d("2.34567")),
+            (Nutrient::Salt, d("-1")),
+            (Nutrient::Sugars, d("150")),
+        ]);
+        assert_eq!(details.get(Nutrient::Fiber), Some(d("2.346")));
+        assert_eq!(details.get(Nutrient::Salt), None);
+        assert_eq!(details.get(Nutrient::Sugars), None);
+    }
+
+    #[test]
+    fn imported_nutrition_drops_inconsistent_details_but_rejects_bad_macros() {
+        let details = Details::lenient([(Nutrient::Sugars, d("30")), (Nutrient::Iron, d("1.2"))]);
+        let n = Nutrition::from_imported(d("100"), d("5"), d("20"), d("1"), details).unwrap();
+        assert_eq!(n.details().get(Nutrient::Sugars), None);
+        assert_eq!(n.details().get(Nutrient::Iron), Some(d("1.2")));
+        assert!(
+            Nutrition::from_imported(d("100"), d("60"), d("50"), d("1"), Details::default())
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn totals_count_known_values_only() {
+        let with = Portion {
+            grams: Grams::parse("200").unwrap(),
+            nutrition: Nutrition::parse(
+                "50",
+                "1",
+                "10",
+                "0",
+                Details::parse([("fiberG", "2.5")]).unwrap(),
+            )
+            .unwrap(),
+        };
+        let without = Portion {
+            grams: Grams::parse("100").unwrap(),
+            nutrition: Nutrition::parse("50", "1", "10", "0", Details::default()).unwrap(),
+        };
+        let fiber = nutrient_totals(&[&with, &without])
+            .into_iter()
+            .find(|t| t.nutrient == Nutrient::Fiber)
+            .unwrap();
+        assert_eq!((fiber.amount, fiber.known, fiber.total), (d("5"), 1, 2));
+    }
+}

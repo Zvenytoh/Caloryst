@@ -476,4 +476,50 @@ mod tests {
         assert_eq!(r.goals.kcal, Decimal::from(2760));
         assert_eq!(r.goals.protein, Decimal::from(128));
     }
+
+    #[test]
+    fn rejects_minors_and_out_of_range_bodies() {
+        let input = |birth_year, height_cm| ProfileInput {
+            sex: "female",
+            birth_year,
+            height_cm,
+            weight_kg: "60",
+            activity: "light",
+            objective: "maintain",
+        };
+        let today = date!(2026 - 10 - 20);
+        assert!(Profile::parse(input(2015, "165"), today).is_err());
+        assert!(Profile::parse(input(1990, "300"), today).is_err());
+        assert!(Profile::parse(input(1990, "165.25"), today).is_err());
+        assert!(Profile::parse(input(1990, "165.5"), today).is_ok());
+    }
+
+    #[test]
+    fn analysis_flags_sparse_logging_and_low_protein() {
+        use crate::{Details, Grams, Nutrition, Portion};
+        let rice = Portion {
+            grams: Grams::parse("300").unwrap(),
+            nutrition: Nutrition::parse("130", "2.7", "28", "0.3", Details::default()).unwrap(),
+        };
+        let days = vec![
+            DayLog {
+                portions: vec![&rice],
+                burned_kcal: Decimal::ZERO,
+            },
+            DayLog {
+                portions: vec![],
+                burned_kcal: Decimal::ZERO,
+            },
+        ];
+        let a = analyze(&Goals::default(), None, 7, &days);
+        assert_eq!(a.days_logged, 1);
+        let status = |t: Topic| a.findings.iter().find(|f| f.topic == t).map(|f| f.status);
+        assert_eq!(status(Topic::Logging), Some(Status::Low));
+        assert_eq!(status(Topic::Protein), Some(Status::Low));
+        assert_eq!(status(Topic::Energy), Some(Status::Low));
+        // Rice is mostly carbohydrate: more than 60 % of energy.
+        assert_eq!(status(Topic::Carbs), Some(Status::High));
+        // No fibre data at all: no fibre judgement rather than a false "low".
+        assert_eq!(status(Topic::Fiber), None);
+    }
 }
