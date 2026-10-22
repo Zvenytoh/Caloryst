@@ -1,4 +1,5 @@
 import { formatKcal } from '../../shared/format'
+import { CheckIcon } from '../../shared/icons'
 import { useCountUp } from '../../shared/useCountUp'
 import type { Diary } from './api'
 
@@ -79,6 +80,11 @@ export function Summary({ diary }: { diary: Diary }) {
             </span>
             <span className="macro__value">
               {formatKcal(diary.totals[m.key])} / {formatKcal(diary.goals[m.key])} g
+              {Number(diary.goals[m.key]) > 0 && Number(diary.totals[m.key]) >= Number(diary.goals[m.key]) * 0.95 && (
+                <span className="macro__check" role="img" aria-label="objectif atteint">
+                  <CheckIcon size={12} />
+                </span>
+              )}
             </span>
           </li>
         ))}

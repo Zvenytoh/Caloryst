@@ -336,12 +336,31 @@ abbr[title] {
 }
 
 .tabs {
+  position: relative;
   display: flex;
   gap: var(--space-1);
   padding: var(--space-1);
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
+}
+
+/* One highlight that glides to the current tab (positioned by Shell). */
+.tabs__indicator {
+  position: absolute;
+  inset-block: var(--space-1);
+  inset-inline-start: 0;
+  inline-size: var(--tab-w, 0);
+  border-radius: 999px;
+  background: var(--brand-soft);
+  transform: translateX(var(--tab-x, 0));
+  transition:
+    transform 380ms cubic-bezier(0.3, 1.25, 0.4, 1),
+    inline-size 380ms cubic-bezier(0.3, 1.25, 0.4, 1);
+}
+
+.tab {
+  position: relative;
 }
 
 .tab {
@@ -363,8 +382,17 @@ abbr[title] {
 }
 
 .tab[aria-current='page'] {
-  background: var(--brand-soft);
   color: var(--brand);
+}
+
+.tab[aria-current='page'] svg {
+  animation: tab-pop 360ms var(--ease);
+}
+
+@keyframes tab-pop {
+  40% {
+    transform: scale(1.18);
+  }
 }
 
 .tab svg {
@@ -734,6 +762,25 @@ abbr[title] {
   transform-origin: left;
   transition: inline-size 700ms var(--ease);
   animation: grow-x 1000ms 250ms var(--ease) both;
+}
+
+.macro__check {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 18px;
+  block-size: 18px;
+  margin-inline-start: var(--space-1);
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--brand-ink);
+  vertical-align: -3px;
+  animation: check-pop 420ms cubic-bezier(0.3, 1.5, 0.4, 1) both;
+}
+
+@keyframes check-pop {
+  from {
+    transform: scale(0);
+  }
 }
 
 /* Meals */
@@ -1557,18 +1604,22 @@ fieldset.segmented legend {
 .skeleton {
   block-size: 120px;
   border-radius: var(--radius-lg);
-  background: var(--surface-2);
-  animation: pulse 1.4s ease-in-out infinite;
+  background: linear-gradient(100deg, var(--surface-2) 40%, color-mix(in srgb, var(--surface-2) 55%, var(--surface)) 50%, var(--surface-2) 60%) 0 0 / 300% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: 0 0;
+  }
 }
 
 .skeleton--summary {
   block-size: 320px;
-}
-
-@keyframes pulse {
-  50% {
-    opacity: 0.55;
-  }
 }
 
 /* Add dialog: bottom sheet on phones, centered panel on larger screens */
@@ -1896,8 +1947,12 @@ fieldset.segmented legend {
     font-size: 0.8125rem;
   }
 
-  .tab[aria-current='page'] {
-    background: transparent;
+  .tabs__indicator {
+    inset-block: var(--space-1) auto;
+    block-size: 3px;
+    inline-size: calc(var(--tab-w, 0px) * 0.4);
+    transform: translateX(calc(var(--tab-x, 0px) + var(--tab-w, 0px) * 0.3));
+    background: var(--brand);
   }
 
   .tab svg {
@@ -1961,7 +2016,9 @@ fieldset.segmented legend {
   }
 
   .glass__fill,
-  .skeleton {
+  .skeleton,
+  .tab[aria-current='page'] svg,
+  .macro__check {
     animation: none !important;
   }
 
