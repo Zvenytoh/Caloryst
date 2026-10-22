@@ -55,9 +55,9 @@ export function WeekStrip({ date, version, onSelect }: Props) {
                 type="button"
                 className={`week__day${day === now ? ' week__day--today' : ''}`}
                 aria-pressed={day === date}
-                aria-label={label}
                 onClick={() => onSelect(day)}
               >
+                <span className="visually-hidden">{label}</span>
                 <span className="week__initial" aria-hidden="true">
                   {initial}
                 </span>
@@ -76,7 +76,9 @@ export function WeekStrip({ date, version, onSelect }: Props) {
                       />
                     )}
                   </svg>
-                  <span className="week__number">{n}</span>
+                  <span className="week__number" aria-hidden="true">
+                    {n}
+                  </span>
                 </span>
               </button>
             </li>

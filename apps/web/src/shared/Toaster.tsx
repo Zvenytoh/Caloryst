@@ -48,10 +48,12 @@ function ToastItem({ item }: { item: Toast }) {
 export function Toaster() {
   const items = useToasts()
   return (
-    <ol className="toaster" role="status" aria-live="polite" aria-label="Notifications">
-      {items.map((t) => (
-        <ToastItem key={t.id} item={t} />
-      ))}
-    </ol>
+    <div role="status" aria-live="polite" aria-label="Notifications">
+      <ol className="toaster">
+        {items.map((t) => (
+          <ToastItem key={t.id} item={t} />
+        ))}
+      </ol>
+    </div>
   )
 }
