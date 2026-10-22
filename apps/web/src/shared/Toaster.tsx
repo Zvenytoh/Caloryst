@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CheckIcon, CloseIcon } from './icons'
-import { dismiss, useToasts, type Toast } from './toast'
+import { dismiss, toast, useToasts, type Toast } from './toast'
 
 const VISIBLE_MS = 5000
 
@@ -29,9 +29,13 @@ function ToastItem({ item }: { item: Toast }) {
         <button
           type="button"
           className="toast__action"
-          onClick={() => {
+          onClick={async () => {
             dismiss(item.id)
-            void item.action?.run()
+            try {
+              await item.action?.run()
+            } catch {
+              toast(`${item.action?.label ?? 'Action'} impossible : vérifiez votre connexion et réessayez.`)
+            }
           }}
         >
           {item.action.label}

@@ -3,6 +3,7 @@ import { DiaryPage } from '../features/diary/DiaryPage'
 import { ChartIcon, FoodsIcon, JournalIcon, ProfileIcon } from '../shared/icons'
 import { Logo } from '../shared/Logo'
 import { Toaster } from '../shared/Toaster'
+import { PageBoundary } from './PageBoundary'
 
 // Secondary tabs load on demand; hovering or focusing a tab starts the download early.
 const loadFoods = () => import('../features/foods/FoodsPage')
@@ -75,12 +76,15 @@ export function Shell({ displayName, onSignOut, onUnauthenticated }: Props) {
         </nav>
       </header>
       <main className="shell__main">
-        <Suspense fallback={<div className="skeleton skeleton--summary" aria-busy="true" aria-label="Chargement" />}>
-          {tab === 'journal' && <DiaryPage onUnauthenticated={onUnauthenticated} />}
-          {tab === 'foods' && <FoodsPage />}
-          {tab === 'analysis' && <AnalysisPage onEditProfile={() => open('profile')} />}
-          {tab === 'profile' && <ProfilePage displayName={displayName} onSignOut={onSignOut} />}
-        </Suspense>
+        {/* key: a failed page must not keep the other tabs on the error screen. */}
+        <PageBoundary key={tab}>
+          <Suspense fallback={<div className="skeleton skeleton--summary" aria-busy="true" aria-label="Chargement" />}>
+            {tab === 'journal' && <DiaryPage onUnauthenticated={onUnauthenticated} />}
+            {tab === 'foods' && <FoodsPage />}
+            {tab === 'analysis' && <AnalysisPage onEditProfile={() => open('profile')} />}
+            {tab === 'profile' && <ProfilePage displayName={displayName} onSignOut={onSignOut} />}
+          </Suspense>
+        </PageBoundary>
       </main>
       <Toaster />
     </div>
