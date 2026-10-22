@@ -83,8 +83,21 @@ export async function fetchDiary(date: string, signal: AbortSignal): Promise<Dia
   }
 }
 
-export async function recordEntry(foodId: string, grams: string, date: string, meal: Meal): Promise<void> {
-  await api('/diary/entries', { method: 'POST', body: JSON.stringify({ foodId, grams, date, meal }) })
+/** Records a portion and returns the created entry (its id allows undo). */
+export async function recordEntry(foodId: string, grams: string, date: string, meal: Meal): Promise<Entry> {
+  const body = await api('/diary/entries', { method: 'POST', body: JSON.stringify({ foodId, grams, date, meal }) })
+  if (!body) throw new Error('Réponse vide.')
+  return toEntry(body)
+}
+
+export type WeekDay = { date: string; kcal: string }
+export type Week = { goalKcal: string; days: WeekDay[] }
+
+/** Monday to Sunday around `date`, with the energy eaten each day. */
+export async function fetchWeek(date: string, signal: AbortSignal): Promise<Week> {
+  const body = await api(`/diary/week?date=${encodeURIComponent(date)}`, { signal })
+  if (!body) throw new Error('Réponse vide.')
+  return { goalKcal: str(body, 'goalKcal'), days: list(body, 'days').map((d) => ({ date: str(d, 'date'), kcal: str(d, 'kcal') })) }
 }
 
 export async function updateEntry(id: string, grams: string): Promise<void> {

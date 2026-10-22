@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { errorMessage } from '../../shared/api'
 import { GlassIcon } from '../../shared/icons'
+import { tap } from '../../shared/toast'
 import { changeWater } from './api'
 
 const GLASS_ML = 250
@@ -14,11 +15,12 @@ export function WaterCard({ date, waterMl, goalMl, onChanged }: Props) {
   const glasses = Math.min(16, Math.max(drunk + 1, Math.ceil(Number(goalMl) / GLASS_ML)))
 
   // Tapping glass n sets the level to n glasses; tapping the last full glass empties it.
-  const tap = async (n: number) => {
+  const pour = async (n: number) => {
     const target = n === drunk ? n - 1 : n
     setBusy(true)
     setError(null)
     try {
+      tap(8)
       await changeWater(date, (target - drunk) * GLASS_ML)
       onChanged()
     } catch (err: unknown) {
@@ -46,7 +48,7 @@ export function WaterCard({ date, waterMl, goalMl, onChanged }: Props) {
             disabled={busy}
             aria-pressed={n <= drunk}
             aria-label={n <= drunk ? `Verre ${n} bu` : `Boire un verre (${n})`}
-            onClick={() => void tap(n)}
+            onClick={() => void pour(n)}
           >
             <GlassIcon full={n <= drunk} />
           </button>

@@ -428,6 +428,14 @@ struct DateQuery {
     date: String,
 }
 
+async fn week(State(s): State<AppState>, a: Authed, Query(q): Query<DateQuery>) -> ApiResult {
+    let (goals, days) = app::week(&s.store, &a.actor, &q.date).await?;
+    Ok(Json(json!({
+        "goalKcal": dec(goals.kcal),
+        "days": days.iter().map(|d| json!({ "date": format_date(d.date), "kcal": dec1(d.kcal) })).collect::<Vec<_>>(),
+    })))
+}
+
 async fn diary(State(s): State<AppState>, a: Authed, Query(q): Query<DateQuery>) -> ApiResult {
     let day = app::day(&s.store, &a.actor, &q.date).await?;
     let summary = day.summary();
@@ -671,6 +679,7 @@ pub fn api(state: AppState) -> Router {
         .route("/foods/barcode/{code}", get(food_by_barcode))
         .route("/goals", get(get_goals).put(put_goals))
         .route("/diary", get(diary))
+        .route("/diary/week", get(week))
         .route("/diary/entries", post(record_entry))
         .route(
             "/diary/entries/{id}",

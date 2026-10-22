@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatAmount, formatDay, formatKcal, formatWhole, shiftDate, toDecimal } from './format'
+import { dayChip, formatAmount, formatDay, formatKcal, formatWhole, mondayOf, relativeDay, shiftDate, toDecimal } from './format'
 
 // French number formatting groups thousands with a narrow no-break space.
 const NNBSP = ' '
@@ -35,5 +35,23 @@ describe('calendar dates', () => {
 
   it('names the day in French with a capital letter', () => {
     expect(formatDay('2026-10-22')).toBe('Jeudi 22 octobre')
+  })
+
+  it('finds the Monday of a week, including on Sundays and across months', () => {
+    expect(mondayOf('2026-10-22')).toBe('2026-10-19')
+    expect(mondayOf('2026-10-25')).toBe('2026-10-19')
+    expect(mondayOf('2026-11-01')).toBe('2026-10-26')
+    expect(mondayOf('2026-10-19')).toBe('2026-10-19')
+  })
+
+  it('gives compact day chips', () => {
+    expect(dayChip('2026-10-22')).toEqual({ initial: 'J', day: 22 })
+  })
+
+  it('describes days relative to today', () => {
+    expect(relativeDay('2026-10-21', '2026-10-22')).toBe('Hier')
+    expect(relativeDay('2026-10-24', '2026-10-22')).toBe('Après-demain')
+    expect(relativeDay('2026-10-25', '2026-10-22')).toBe('Dans 3 jours')
+    expect(relativeDay('2026-10-12', '2026-10-22')).toBe('Il y a 10 jours')
   })
 })

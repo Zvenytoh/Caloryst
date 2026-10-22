@@ -12,10 +12,10 @@
   --brand-hover: #09664a;
   --brand-ink: #ffffff;
   --brand-soft: #dcf1e8;
-  --protein: #0e9f6e;
-  --carbs: #f2a93b;
-  --fat: #ef6b57;
-  --water: #3b9ee8;
+  --protein: #0b8a5f;
+  --carbs: #b56f0c;
+  --fat: #d4503b;
+  --water: #2a86cc;
   --track: #e3e8e5;
   --danger: #b3261e;
   --danger-soft: #fbe9e7;
@@ -395,19 +395,134 @@ abbr[title] {
   letter-spacing: -0.045em;
 }
 
-.daynav {
+/* Week strip */
+.week {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
 }
 
-.daynav__pick input {
-  min-block-size: 40px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border);
+.week__days {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  touch-action: pan-y;
+}
+
+.week__day {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  inline-size: 100%;
+  padding: var(--space-2) 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background-color 200ms var(--ease),
+    transform 160ms var(--ease);
+}
+
+.week__day:hover {
+  background: var(--surface-2);
+}
+
+.week__day:active {
+  transform: scale(0.95);
+}
+
+.week__day[aria-pressed='true'] {
+  background: var(--brand-soft);
+  color: var(--text);
+}
+
+.week__initial {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.week__day--today .week__initial {
+  color: var(--brand);
+}
+
+.week__day--today::after {
+  content: '';
+  position: absolute;
+  inset-block-end: 3px;
+  inline-size: 4px;
+  block-size: 4px;
   border-radius: 999px;
-  background: var(--surface);
-  font-weight: 600;
+  background: var(--brand);
+}
+
+.week__ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  inline-size: 36px;
+  block-size: 36px;
+}
+
+.week__ring svg {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.week__track,
+.week__value {
+  fill: none;
+  stroke-width: 3.5;
+}
+
+.week__track {
+  stroke: var(--track);
+}
+
+.week__value {
+  stroke: var(--protein);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 600ms var(--ease);
+  animation: fill-arc 900ms var(--ease) both;
+}
+
+.week__value--over {
+  stroke: var(--fat);
+}
+
+.week__number {
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.week__calendar {
+  position: relative;
+}
+
+/* The native date input covers the icon so it stays operable by keyboard and pointer. */
+.week__calendar input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.week__calendar:focus-within {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .dashboard {
@@ -1350,6 +1465,94 @@ fieldset.segmented legend {
   overflow-wrap: anywhere;
 }
 
+/* Toasts */
+.toaster {
+  position: fixed;
+  inset-inline: var(--space-4);
+  inset-block-end: max(var(--space-5), env(safe-area-inset-bottom));
+  z-index: 20;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-inline-size: 30rem;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--ink-text);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.22);
+  font-size: 0.875rem;
+  pointer-events: auto;
+  animation: toast-in 320ms var(--ease) both;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+}
+
+.toast__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+.toast__message {
+  overflow-wrap: anywhere;
+}
+
+.toast__action,
+.toast__close {
+  flex: none;
+  min-block-size: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.toast__action {
+  padding: 0 var(--space-3);
+  color: var(--brand);
+}
+
+.toast__close {
+  display: grid;
+  place-items: center;
+  inline-size: 36px;
+  opacity: 0.7;
+}
+
+.toast__action:hover,
+.toast__close:hover {
+  background: color-mix(in srgb, var(--ink-text) 14%, transparent);
+}
+
+@media (min-width: 40.0625rem) {
+  .toaster {
+    inset-inline: auto var(--space-5);
+    justify-items: end;
+  }
+}
+
 /* Skeletons */
 .skeleton {
   block-size: 120px;
@@ -1382,10 +1585,41 @@ fieldset.segmented legend {
 
 .sheet::backdrop {
   background: rgb(8 12 10 / 0.5);
+  animation: fade-in 220ms var(--ease);
 }
 
 .sheet[open] {
-  animation: rise 220ms var(--ease);
+  animation: rise 260ms var(--ease);
+  transition: transform 220ms var(--ease);
+}
+
+.sheet[data-closing] {
+  animation: sink 200ms var(--ease) forwards;
+}
+
+.sheet[data-closing]::backdrop {
+  animation: fade-out 200ms var(--ease) forwards;
+}
+
+@keyframes sink {
+  to {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+.sheet__grabber {
+  display: none;
+}
+
+.portion__selected {
+  animation: rise-in 260ms var(--ease) both;
 }
 
 @keyframes rise {
@@ -1584,6 +1818,59 @@ fieldset.segmented legend {
 
 /* Phones: bottom tab bar and bottom sheet */
 @media (max-width: 40rem) {
+  .toaster {
+    inset-block-end: calc(var(--nav-height) + var(--space-4) + env(safe-area-inset-bottom));
+  }
+
+  .sheet__grabber {
+    display: block;
+    inline-size: 40px;
+    block-size: 5px;
+    margin: var(--space-2) auto 0;
+    border-radius: 999px;
+    background: var(--border);
+    touch-action: none;
+    cursor: grab;
+  }
+
+  .sheet__head {
+    touch-action: none;
+  }
+
+  .sheet[open] {
+    animation-name: rise-sheet;
+    animation-duration: 340ms;
+  }
+
+  @keyframes rise-sheet {
+    from {
+      transform: translateY(100%);
+    }
+  }
+
+  .sheet[data-closing] {
+    animation-name: sink-sheet;
+  }
+
+  @keyframes sink-sheet {
+    to {
+      transform: translateY(100%);
+    }
+  }
+
+  .week {
+    padding: var(--space-1);
+  }
+
+  .week > .icon-button:not(.week__calendar) {
+    display: none;
+  }
+
+  .week__ring {
+    inline-size: 32px;
+    block-size: 32px;
+  }
+
   .shell {
     padding-block-end: calc(var(--nav-height) + var(--space-6) + env(safe-area-inset-bottom));
   }

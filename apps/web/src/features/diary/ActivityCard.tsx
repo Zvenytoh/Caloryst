@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { ApiError, errorMessage } from '../../shared/api'
 import { formatKcal, toDecimal } from '../../shared/format'
 import { PlusIcon, PulseIcon, TrashIcon } from '../../shared/icons'
+import { tap, toast } from '../../shared/toast'
 import { addActivity, deleteActivity, type Activity } from './api'
 
 type Props = { date: string; activities: Activity[]; onChanged: () => void }
@@ -31,6 +32,8 @@ export function ActivityCard({ date, activities, onChanged }: Props) {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (await run(() => addActivity(date, name.trim(), toDecimal(kcal)))) {
+      tap()
+      toast(`Activité ajoutée : ${name.trim()}`)
       setName('')
       setKcal('')
       setAdding(false)

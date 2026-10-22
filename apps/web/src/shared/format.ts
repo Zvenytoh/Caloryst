@@ -25,6 +25,31 @@ export function shiftDate(date: string, days: number): string {
   return toIsoDate(new Date(y, m - 1, d + days))
 }
 
+const localDate = (date: string) => {
+  const [y = 1970, m = 1, d = 1] = date.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+/** Monday of the week containing `date` (weeks start on Monday in France). */
+export function mondayOf(date: string): string {
+  return shiftDate(date, -((localDate(date).getDay() + 6) % 7))
+}
+
+const relative = new Intl.RelativeTimeFormat('fr-FR', { numeric: 'auto' })
+
+/** "hier", "demain", "il y a 3 jours"… relative to `from` (today by default). */
+export function relativeDay(date: string, from = today()): string {
+  const days = Math.round((localDate(date).getTime() - localDate(from).getTime()) / 86_400_000)
+  const label = relative.format(days, 'day')
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+/** Short weekday initial ("L", "M"…) and day of month for compact calendars. */
+export function dayChip(date: string): { initial: string; day: number } {
+  const d = localDate(date)
+  return { initial: new Intl.DateTimeFormat('fr-FR', { weekday: 'narrow' }).format(d).toUpperCase(), day: d.getDate() }
+}
+
 export function formatDay(date: string): string {
   const [y = 1970, m = 1, d = 1] = date.split('-').map(Number)
   const label = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(y, m - 1, d))

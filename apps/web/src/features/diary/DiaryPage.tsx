@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { ApiError, errorMessage } from '../../shared/api'
-import { formatDay, shiftDate, today } from '../../shared/format'
-import { ChevronLeftIcon, ChevronRightIcon } from '../../shared/icons'
+import { formatDay, relativeDay, today } from '../../shared/format'
 import { ActivityCard } from './ActivityCard'
 import { AddEntryDialog } from './AddEntryDialog'
 import { fetchDiary, type Diary, type Meal } from './api'
 import { MealCard } from './MealCard'
 import { Summary } from './Summary'
 import { WaterCard } from './WaterCard'
+import { WeekStrip } from './WeekStrip'
 
 type Props = { onUnauthenticated: () => void }
 
@@ -43,26 +43,15 @@ export function DiaryPage({ onUnauthenticated }: Props) {
       <header className="day-head">
         <div>
           <h1 className="day-head__title">{isToday ? 'Aujourd’hui' : formatDay(date)}</h1>
-          {isToday && <p className="muted">{formatDay(date)}</p>}
+          <p className="muted">{isToday ? formatDay(date) : relativeDay(date)}</p>
         </div>
-        <nav className="daynav" aria-label="Choisir le jour">
-          <button type="button" className="icon-button" aria-label="Jour précédent" onClick={() => setDate((d) => shiftDate(d, -1))}>
-            <ChevronLeftIcon size={20} />
+        {!isToday && (
+          <button type="button" className="button button--ghost button--small" onClick={() => setDate(today())}>
+            Revenir à aujourd’hui
           </button>
-          <label className="daynav__pick">
-            <span className="visually-hidden">Date du journal</span>
-            <input type="date" value={date} required onChange={(e) => e.target.value && setDate(e.target.value)} />
-          </label>
-          <button type="button" className="icon-button" aria-label="Jour suivant" onClick={() => setDate((d) => shiftDate(d, 1))}>
-            <ChevronRightIcon size={20} />
-          </button>
-          {!isToday && (
-            <button type="button" className="button button--ghost button--small" onClick={() => setDate(today())}>
-              Aujourd’hui
-            </button>
-          )}
-        </nav>
+        )}
       </header>
+      <WeekStrip date={date} version={version} onSelect={setDate} />
 
       {error && (
         <div role="alert" className="notice notice--error">

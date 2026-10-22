@@ -481,6 +481,40 @@ pub async fn set_profile(
     Ok((profile, recommendation))
 }
 
+/// Energy eaten on one day of a week.
+pub struct WeekDay {
+    pub date: Date,
+    pub kcal: Decimal,
+}
+
+/// Monday to Sunday of the week containing `date`, with the energy eaten each day.
+pub async fn week<S: DiaryStore + GoalsStore>(
+    store: &S,
+    actor: &Actor,
+    date: &str,
+) -> Result<(Goals, Vec<WeekDay>), Error> {
+    let date = domain::parse_date(date)?;
+    let monday = date - Duration::days(i64::from(date.weekday().number_days_from_monday()));
+    let sunday = monday + Duration::days(6);
+    let owner = actor.user_id();
+    let goals = store.goals(owner).await?.unwrap_or_default();
+    let entries = store.entries_between(owner, monday, sunday).await?;
+    let days = (0..7)
+        .map(|i| {
+            let day = monday + Duration::days(i);
+            WeekDay {
+                date: day,
+                kcal: entries
+                    .iter()
+                    .filter(|(d, _)| *d == day)
+                    .map(|(_, e)| e.portion.amounts().kcal)
+                    .sum(),
+            }
+        })
+        .collect();
+    Ok((goals, days))
+}
+
 pub const ANALYSIS_DAYS: i64 = 7;
 
 pub struct AnalysisView {

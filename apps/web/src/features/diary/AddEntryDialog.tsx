@@ -1,18 +1,28 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { ApiError, errorMessage } from '../../shared/api'
-import { formatDay, formatKcal, toDecimal } from '../../shared/format'
+import { formatDay, formatGrams, formatKcal, toDecimal } from '../../shared/format'
 import { CloseIcon } from '../../shared/icons'
+import { tap, toast } from '../../shared/toast'
+import { useSheet } from '../../shared/useSheet'
 import type { Food } from '../foods/api'
 import { FoodPicker } from '../foods/FoodPicker'
 import { NewFoodForm } from '../foods/NewFoodForm'
-import { MEAL_LABEL, recordEntry, type Meal } from './api'
+import { MEAL_LABEL, deleteEntry, recordEntry, type Meal } from './api'
 
 type Props = { date: string; meal: Meal; onClose: () => void; onAdded: () => void }
 
 const QUICK_GRAMS = ['50', '100', '150', '200']
 
+const TO_MEAL: Record<Meal, string> = {
+  breakfast: 'au petit-déjeuner',
+  lunch: 'au déjeuner',
+  dinner: 'au dîner',
+  snack: 'à la collation',
+}
+
 export function AddEntryDialog({ date, meal, onClose, onAdded }: Props) {
-  const dialog = useRef<HTMLDialogElement>(null)
+  const { dialogProps, grabberProps, close } = useSheet('input[type=search]')
+  const gramsInput = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<Food | null>(null)
   const [grams, setGrams] = useState('')
@@ -20,11 +30,11 @@ export function AddEntryDialog({ date, meal, onClose, onAdded }: Props) {
   const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  useEffect(() => {
-    dialog.current?.showModal()
-    // showModal() focuses the close button; start on the food search instead.
-    dialog.current?.querySelector<HTMLInputElement>('input[type=search]')?.focus()
-  }, [])
+  const select = (food: Food) => {
+    setSelected(food)
+    // Next step is the portion: save a tap.
+    gramsInput.current?.focus()
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -32,9 +42,17 @@ export function AddEntryDialog({ date, meal, onClose, onAdded }: Props) {
     setBusy(true)
     setErrors({})
     try {
-      await recordEntry(selected.id, toDecimal(grams), date, meal)
+      const entry = await recordEntry(selected.id, toDecimal(grams), date, meal)
+      tap()
+      toast(`${entry.foodName}, ${formatGrams(entry.grams)} g ajouté ${TO_MEAL[meal]}`, {
+        label: 'Annuler',
+        run: async () => {
+          await deleteEntry(entry.id)
+          onAdded()
+        },
+      })
       onAdded()
-      onClose()
+      close()
     } catch (err: unknown) {
       setErrors(err instanceof ApiError ? { form: err.message, ...err.fieldErrors } : { form: errorMessage(err) })
     } finally {
@@ -49,13 +67,14 @@ export function AddEntryDialog({ date, meal, onClose, onAdded }: Props) {
   }
 
   return (
-    <dialog ref={dialog} className="sheet" aria-labelledby="add-title" onClose={onClose}>
-      <div className="sheet__head">
+    <dialog {...dialogProps} className="sheet" aria-labelledby="add-title" onClose={onClose}>
+      <div className="sheet__grabber" aria-hidden="true" {...grabberProps} />
+      <div className="sheet__head" {...grabberProps}>
         <div>
           <h2 id="add-title">{MEAL_LABEL[meal]}</h2>
           <p className="muted">Ajouter une portion · {formatDay(date)}</p>
         </div>
-        <button type="button" className="icon-button" aria-label="Fermer" onClick={() => dialog.current?.close()}>
+        <button type="button" className="icon-button" aria-label="Fermer" onClick={close} onPointerDown={(e) => e.stopPropagation()}>
           <CloseIcon size={20} />
         </button>
       </div>
@@ -64,14 +83,14 @@ export function AddEntryDialog({ date, meal, onClose, onAdded }: Props) {
         <NewFoodForm initialName={query.trim()} onCreated={created} onCancel={() => setCreating(false)} />
       ) : (
         <div className="sheet__body">
-          <FoodPicker query={query} onQueryChange={setQuery} selected={selected} onSelect={setSelected} />
+          <FoodPicker query={query} onQueryChange={setQuery} selected={selected} onSelect={select} />
           <button type="button" className="link-button" onClick={() => setCreating(true)}>
             + Créer un aliment{query.trim() ? ` « ${query.trim()} »` : ''}
           </button>
 
           <form className="portion" onSubmit={submit} noValidate>
             {selected ? (
-              <p className="portion__selected">
+              <p className="portion__selected" key={selected.id}>
                 <strong>{selected.name}</strong> <span className="muted">· {formatKcal(selected.kcalPer100g)} kcal/100 g</span>
               </p>
             ) : (
@@ -84,6 +103,7 @@ export function AddEntryDialog({ date, meal, onClose, onAdded }: Props) {
             <label className="field">
               <span className="field__label">Portion (g)</span>
               <input
+                ref={gramsInput}
                 className="input input--grams"
                 inputMode="decimal"
                 placeholder="ex. 150"
@@ -112,7 +132,7 @@ export function AddEntryDialog({ date, meal, onClose, onAdded }: Props) {
               </p>
             )}
             <div className="sheet__actions">
-              <button type="button" className="button button--ghost" onClick={() => dialog.current?.close()}>
+              <button type="button" className="button button--ghost" onClick={close}>
                 Annuler
               </button>
               <button type="submit" className="button" disabled={busy || !selected || !grams.trim()}>

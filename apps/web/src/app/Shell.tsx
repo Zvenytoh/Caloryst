@@ -5,6 +5,7 @@ import { FoodsPage } from '../features/foods/FoodsPage'
 import { ProfilePage } from '../features/goals/ProfilePage'
 import { ChartIcon, FoodsIcon, JournalIcon, ProfileIcon } from '../shared/icons'
 import { Logo } from '../shared/Logo'
+import { Toaster } from '../shared/Toaster'
 
 type Tab = 'journal' | 'foods' | 'analysis' | 'profile'
 
@@ -41,6 +42,7 @@ export function Shell({ displayName, onSignOut, onUnauthenticated }: Props) {
         {tab === 'analysis' && <AnalysisPage onEditProfile={() => setTab('profile')} />}
         {tab === 'profile' && <ProfilePage displayName={displayName} onSignOut={onSignOut} />}
       </main>
+      <Toaster />
     </div>
   )
 }
