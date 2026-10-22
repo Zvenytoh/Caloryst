@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 
 let waiting: ServiceWorker | null = null
+// Set only by the "Mettre à jour" button: the first install also fires controllerchange
+// (clients.claim), and reloading then would cost a full page load on every first visit.
+let updateRequested = false
 const listeners = new Set<() => void>()
 
 function setWaiting(worker: ServiceWorker | null) {
@@ -21,12 +24,10 @@ export function registerServiceWorker() {
         if (worker.state === 'installed' && navigator.serviceWorker.controller) setWaiting(worker)
       })
     })
-    let reloading = false
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!reloading) {
-        reloading = true
-        window.location.reload()
-      }
+      if (!updateRequested) return
+      updateRequested = false
+      window.location.reload()
     })
   })
 }
@@ -39,5 +40,11 @@ export function useUpdate(): { available: boolean; apply: () => void } {
     listeners.add(listener)
     return () => void listeners.delete(listener)
   }, [])
-  return { available, apply: () => waiting?.postMessage('skip-waiting') }
+  return {
+    available,
+    apply: () => {
+      updateRequested = true
+      waiting?.postMessage('skip-waiting')
+    },
+  }
 }
